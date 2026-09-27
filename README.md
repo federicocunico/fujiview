@@ -34,3 +34,16 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+## Release Windows
+
+Il setup utilizza NSIS tramite Tauri. Ogni push di un tag `vX.Y.Z` avvia la workflow `Release Windows`, compila su `windows-latest`, carica l'installer come artefatto e crea una GitHub Release pubblica contenente `FujiView_X.Y.Z_x64-setup.exe`.
+
+Per una nuova versione, partire da un working tree pulito ed eseguire:
+
+```powershell
+npm run release -- -Version 0.2.0
+```
+
+Lo script sincronizza le versioni di npm, Cargo e Tauri, esegue i test, costruisce il setup locale, crea commit e tag annotato, quindi invia branch e tag a `origin`. Usare `-SkipLocalBuild` soltanto quando si vuole delegare la build interamente a GitHub Actions.
+
+Il setup non è firmato con un certificato Authenticode: è installabile, ma Windows SmartScreen può mostrare un avviso finché non viene configurato un certificato di code signing.

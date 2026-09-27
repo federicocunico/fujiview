@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "release:check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-version.ps1",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
@@ -26,4 +28,3 @@
     "vitest": "^2.1.8"
   }
 }
-

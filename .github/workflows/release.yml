@@ -1,0 +1,75 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check tag and application versions
+        shell: pwsh
+        run: ./scripts/check-version.ps1 -Tag "${{ github.ref_name }}"
+
+      - name: Test frontend
+        run: npm test
+
+      - name: Test native backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build signed-ready NSIS installer
+        run: npm run tauri build
+
+      - name: Locate installer
+        id: installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -LiteralPath "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Installer NSIS non trovato." }
+          "path=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+          "name=$($installer.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FujiView-${{ github.ref_name }}-Windows-x64
+          path: ${{ steps.installer.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          INSTALLER_PATH: ${{ steps.installer.outputs.path }}
+        run: |
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG $env:INSTALLER_PATH --clobber
+          } else {
+            gh release create $env:RELEASE_TAG $env:INSTALLER_PATH --verify-tag --generate-notes --title "FujiView $env:RELEASE_TAG"
+          }
