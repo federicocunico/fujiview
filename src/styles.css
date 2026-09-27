@@ -1,0 +1,34 @@
+:root { font-family: Inter, "Segoe UI", sans-serif; color: #f4f4f2; background: #0b0c0d; font-synthesis: none; }
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+button, select { font: inherit; }
+button { color: inherit; border: 0; cursor: pointer; }
+.welcome { height: 100%; display: grid; place-content: center; gap: 54px; background: radial-gradient(circle at 50% 30%, #252b2b 0, #111415 38%, #08090a 78%); }
+.brand { display: flex; align-items: center; gap: 18px; justify-content: center; }
+.brand > span { width: 64px; height: 64px; display: grid; place-items: center; background: #d62d32; font: 800 39px/1 Georgia; border-radius: 13px 4px 13px 4px; box-shadow: 0 16px 50px #0009; }
+.brand h1 { margin: 0; font-size: 34px; letter-spacing: -.8px; }.brand p { color: #989c9c; margin: 4px 0 0; letter-spacing: .08em; font-size: 12px; text-transform: uppercase; }
+.welcome section { width: 370px; display: flex; flex-direction: column; gap: 11px; }
+.large { border-radius: 8px; padding: 14px 18px; display: flex; align-items: center; justify-content: center; gap: 9px; font-weight: 650; }
+.primary { background: #e8e9e5; color: #151617; }.primary:hover { background: white; }.secondary { background: #252829; border: 1px solid #3b3e3e; }.secondary:hover { background: #303333; }
+.hint { color: #727777; font-size: 12px; line-height: 1.55; text-align: center; }
+.workspace { height: 100%; display: grid; grid-template-rows: 48px minmax(0,1fr) 42px; background: #050606; }
+header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 10px 0 14px; background: #17191a; border-bottom: 1px solid #2b2d2e; z-index: 4; }
+.title { min-width: 0; display: flex; gap: 12px; align-items: baseline; }.title strong { font-size: 13px; }.title small { color: #898d8d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ratings { display: flex; }.ratings button { padding: 5px 3px; background: transparent; color: #4d5050; }.ratings button:has(svg[fill="currentColor"]) { color: #f4bd39; }.ratings button:hover { color: #ffd05b; transform: scale(1.08); }
+.toolbar { justify-self: end; display: flex; align-items: center; gap: 3px; }.toolbar button { height: 34px; min-width: 34px; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: 5px; background: transparent; color: #aeb1b1; }.toolbar svg { width: 17px; }.toolbar button:hover { background: #292c2d; color: white; }.toolbar .export { background: #d83237; color: white; padding: 0 13px; margin-left: 6px; font-weight: 650; }
+.comparison { min-height: 0; display: grid; gap: 2px; background: #2a2c2c; }.panels-1 { grid-template-columns: 1fr; }.panels-2 { grid-template-columns: repeat(2,1fr); }.panels-3 { grid-template-columns: repeat(3,1fr); }.panels-4 { grid-template-columns: repeat(2,1fr); grid-template-rows: repeat(2,1fr); }
+.panel-wrap { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #101112; }
+.panel-wrap > select { position: absolute; top: 8px; left: 41px; z-index: 3; max-width: 45%; border: 1px solid #ffffff1b; background: #111b; color: #ddd; border-radius: 4px; padding: 4px 24px 4px 7px; font-size: 11px; opacity: .4; transition: opacity .15s; }.panel-wrap:hover > select { opacity: 1; }
+.preview { width: 100%; height: 100%; overflow: hidden; position: relative; display: grid; place-items: center; user-select: none; touch-action: none; }.preview.winner { box-shadow: inset 0 0 0 2px #f0bd3d; }
+.preview img { width: 100%; height: 100%; object-fit: contain; will-change: transform; transform-origin: center; }
+.panel-number { position: absolute; top: 8px; left: 8px; z-index: 3; width: 25px; height: 25px; border-radius: 4px; display: grid; place-items: center; background: #060707c9; border: 1px solid #ffffff29; font: 700 12px monospace; }
+.winner-button { position: absolute; top: 8px; right: 8px; z-index: 3; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #080909b8; border: 1px solid #ffffff24; color: #858888; }.winner .winner-button { color: #f0bd3d; border-color: #f0bd3d; }
+.preset-label { position: absolute; bottom: 8px; left: 8px; z-index: 3; padding: 5px 8px; border-radius: 4px; background: #090a0ac7; font-size: 11px; font-weight: 650; pointer-events: none; }.preset-label small { color: #858989; margin-left: 9px; font-weight: 400; }
+.empty-panel { color: #5f6363; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 12px; }.image-error { max-width: 75%; color: #ff7777; font-size: 12px; text-align: center; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; background: #0b0c0c77; }.loading i, .busy-overlay i { width: 22px; height: 22px; border: 2px solid #ffffff33; border-top-color: #eee; border-radius: 50%; animation: spin .7s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }
+footer { display: grid; grid-template-columns: 42px minmax(80px, 1fr) auto auto 42px; align-items: center; gap: 12px; padding: 0 7px; background: #17191a; border-top: 1px solid #2b2d2e; }footer button { background: transparent; height: 32px; color: #b3b6b6; }footer button:disabled { color: #454747; cursor: default; }footer strong { font-size: 12px; font-variant-numeric: tabular-nums; }footer em { color: #555; font-style: normal; }footer small { color: #777b7b; min-width: 65px; }
+.progress { height: 2px; background: #343737; overflow: hidden; }.progress span { display: block; height: 100%; background: #d83237; transition: width .2s; }
+.toast { position: fixed; right: 13px; bottom: 52px; z-index: 8; padding: 10px 12px; max-width: 520px; border: 1px solid #ffffff1f; border-radius: 6px; background: #252829; box-shadow: 0 8px 30px #000a; display: flex; align-items: center; gap: 12px; font-size: 12px; }
+.busy-overlay { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; gap: 12px; background: #080909d9; color: #ddd; font-size: 13px; backdrop-filter: blur(3px); }.notice { color: #ff9696; font-size: 12px; text-align: center; }
+@media (max-width: 800px) { header { grid-template-columns: 1fr auto; }.ratings { display:none; }.toolbar .export { font-size: 0; }.comparison.panels-3 { grid-template-columns: 1fr; grid-template-rows: repeat(3,1fr); } }
+
