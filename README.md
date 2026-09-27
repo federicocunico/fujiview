@@ -16,11 +16,20 @@ foto/
 
 Ogni sottocartella immediata è un preset. I file vengono abbinati per nome base ignorando maiuscole ed estensione.
 
-## Uso
+## Uso con Make
 
-1. Installa Node.js, Rust MSVC e i prerequisiti Windows di [Tauri 2](https://v2.tauri.app/start/prerequisites/).
-2. Esegui `npm install`.
-3. Avvia con `npm run tauri dev` oppure crea l'installer con `npm run tauri build`.
+Su Windows, dalla root del repository:
+
+```powershell
+make setup       # verifica/installa Node, Rust, C++ Build Tools, WebView2 e pacchetti npm
+make dev         # avvia l'app in modalità sviluppo
+make build       # crea il setup NSIS Windows
+make test        # esegue test frontend e Rust
+make check       # esegue tutte le verifiche usate dalla CI
+make help        # mostra tutti i target disponibili
+```
+
+`make setup` usa `winget` soltanto per i prerequisiti mancanti ed esegue `npm ci` nuovamente solo quando cambia `package-lock.json`. Se GNU Make non è disponibile, installarlo prima oppure eseguire direttamente `powershell -File scripts/bootstrap.ps1 -InstallMissing`.
 
 Scorciatoie: `←/→` cambia scatto, `1–4` sceglie il pannello vincente, `Alt+0–5` assegna il voto, doppio clic alterna fit/zoom. L'export copia solo i vincitori e incorpora `xmp:Rating` nella copia senza ricodificare i pixel.
 
@@ -41,7 +50,7 @@ Il setup utilizza NSIS tramite Tauri. Ogni push di un tag `vX.Y.Z` avvia la work
 Per una nuova versione, partire da un working tree pulito ed eseguire:
 
 ```powershell
-npm run release -- -Version 0.2.0
+make release VERSION=0.2.0
 ```
 
 Lo script sincronizza le versioni di npm, Cargo e Tauri, esegue i test, costruisce il setup locale, crea commit e tag annotato, quindi invia branch e tag a `origin`. Usare `-SkipLocalBuild` soltanto quando si vuole delegare la build interamente a GitHub Actions.
