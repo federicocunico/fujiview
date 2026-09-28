@@ -31,7 +31,7 @@ make help        # mostra tutti i target disponibili
 
 `make setup` usa `winget` soltanto per i prerequisiti mancanti ed esegue `npm ci` nuovamente solo quando cambia `package-lock.json`. Se GNU Make non è disponibile, installarlo prima oppure eseguire direttamente `powershell -File scripts/bootstrap.ps1 -InstallMissing`.
 
-Scorciatoie: `←/→` cambia scatto, `1–4` sceglie il pannello vincente, `Alt+0–5` assegna il voto, doppio clic alterna fit/zoom. L'export copia solo i vincitori e incorpora `xmp:Rating` nella copia senza ricodificare i pixel.
+Un clic sulla foto sceglie quel pannello come vincitore senza cambiare scatto. `Invio` procede allo scatto successivo; `←/→` e i pulsanti freccia navigano avanti e indietro. Le altre scorciatoie sono `1–4` per scegliere il pannello vincente, `Alt+0–5` per assegnare il voto e doppio clic per alternare fit/zoom. L'export copia solo i vincitori e incorpora `xmp:Rating` nella copia senza ricodificare i pixel.
 
 I progetti `.fujiview` sono JSON versionati e gli originali non vengono mai modificati. Le preview sono conservate nella cache locale dell'app con limite LRU di 20 GB.
 

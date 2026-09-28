@@ -16,6 +16,7 @@ function Preview({ variant, viewport, onViewport, panel, winner, onWinner }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const drag = useRef<{ x: number; y: number; ox: number; oy: number } | undefined>(undefined);
+  const dragged = useRef(false);
   const edge = viewport.scale > 3.2 ? 8192 : viewport.scale > 1.6 ? 4096 : 2048;
 
   useEffect(() => {
@@ -31,20 +32,29 @@ function Preview({ variant, viewport, onViewport, panel, winner, onWinner }: {
   }, [variant?.path, edge]);
 
   return <div
-    className={`preview ${winner ? "winner" : ""}`}
+    className={`preview ${variant ? "selectable" : ""} ${winner ? "winner" : ""}`}
+    title={variant ? `Clicca per scegliere ${variant.preset} come vincitore` : undefined}
+    onClick={() => {
+      if (variant && !dragged.current) onWinner();
+      dragged.current = false;
+    }}
     onWheel={(event) => {
       event.preventDefault();
       const scale = Math.min(8, Math.max(1, viewport.scale * (event.deltaY < 0 ? 1.15 : 0.87)));
       onViewport(scale === 1 ? FIT : { ...viewport, scale });
     }}
     onPointerDown={(event) => {
+      dragged.current = false;
       if (viewport.scale <= 1) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       drag.current = { x: event.clientX, y: event.clientY, ox: viewport.x, oy: viewport.y };
     }}
     onPointerMove={(event) => {
       if (!drag.current) return;
-      onViewport({ ...viewport, x: drag.current.ox + event.clientX - drag.current.x, y: drag.current.oy + event.clientY - drag.current.y });
+      const deltaX = event.clientX - drag.current.x;
+      const deltaY = event.clientY - drag.current.y;
+      if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) dragged.current = true;
+      onViewport({ ...viewport, x: drag.current.ox + deltaX, y: drag.current.oy + deltaY });
     }}
     onPointerUp={() => { drag.current = undefined; }}
     onDoubleClick={() => onViewport(viewport.scale === 1 ? { scale: 2, x: 0, y: 0 } : FIT)}
@@ -88,6 +98,11 @@ export default function App() {
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement)?.matches("input,select,textarea")) return;
+      if (event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+        event.preventDefault();
+        go(1);
+        return;
+      }
       if (event.key === "ArrowLeft") go(-1);
       if (event.key === "ArrowRight") go(1);
       if (event.altKey && /^[0-5]$/.test(event.key)) { event.preventDefault(); updateDecision({ rating: Number(event.key), reviewed: true }); }
@@ -216,11 +231,11 @@ export default function App() {
       </div>)}
     </div>
     <footer>
-      <button disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>
+      <button aria-label="Scatto precedente" title="Scatto precedente (freccia sinistra)" disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>
       <div className="progress"><span style={{ width: `${index.shots.length ? ((shotIndex + 1) / index.shots.length) * 100 : 0}%` }}/></div>
       <strong>{index.shots.length ? shotIndex + 1 : 0} <em>/</em> {index.shots.length}</strong>
       <small>{decided} decisi</small>
-      <button disabled={shotIndex >= index.shots.length - 1} onClick={() => go(1)}><ChevronRight /></button>
+      <button aria-label="Scatto successivo" title="Scatto successivo (Invio o freccia destra)" disabled={shotIndex >= index.shots.length - 1} onClick={() => go(1)}><ChevronRight /></button>
     </footer>
     {notice && <button className="toast" onClick={() => setNotice(undefined)}>{notice}<X size={15}/></button>}
     {busy && <div className="busy-overlay"><i />{busy}</div>}
