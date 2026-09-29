@@ -3,7 +3,7 @@ use image::{codecs::jpeg::JpegEncoder, DynamicImage, GenericImageView, ImageEnco
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::{BufReader, BufWriter},
     path::{Path, PathBuf},
@@ -45,6 +45,7 @@ struct IndexedShot {
 struct LibraryIndex {
     root: String,
     presets: Vec<String>,
+    guide_preset: String,
     shots: Vec<IndexedShot>,
     warnings: Vec<String>,
 }
@@ -100,6 +101,10 @@ fn scan_library_impl(root: &Path) -> Result<LibraryIndex, String> {
     }
 
     let mut grouped: BTreeMap<String, (String, Vec<Variant>)> = BTreeMap::new();
+    let mut preset_keys: BTreeMap<String, BTreeSet<String>> = preset_dirs
+        .iter()
+        .map(|(preset, _)| (preset.clone(), BTreeSet::new()))
+        .collect();
     let mut warnings = Vec::new();
     for (preset, directory) in &preset_dirs {
         let entries = match fs::read_dir(directory) {
@@ -139,7 +144,9 @@ fn scan_library_impl(root: &Path) -> Result<LibraryIndex, String> {
                 extension,
                 bytes,
             };
-            let group = grouped.entry(key).or_insert_with(|| (stem, Vec::new()));
+            let group = grouped
+                .entry(key.clone())
+                .or_insert_with(|| (stem, Vec::new()));
             if group.1.iter().any(|existing| existing.preset == *preset) {
                 warnings.push(format!(
                     "Duplicato ignorato in {}: {}",
@@ -147,13 +154,37 @@ fn scan_library_impl(root: &Path) -> Result<LibraryIndex, String> {
                 ));
             } else {
                 group.1.push(variant);
+                if let Some(keys) = preset_keys.get_mut(preset) {
+                    keys.insert(key);
+                }
             }
         }
     }
+
+    // The largest preset is the guide: only its filenames define the catalog.
+    // Because preset_dirs is naturally sorted and we only replace on a strict
+    // increase, ties are deterministic.
+    let mut guide_preset = preset_dirs[0].0.clone();
+    let mut guide_count = preset_keys.get(&guide_preset).map_or(0, BTreeSet::len);
+    for (preset, _) in preset_dirs.iter().skip(1) {
+        let count = preset_keys.get(preset).map_or(0, BTreeSet::len);
+        if count > guide_count {
+            guide_preset = preset.clone();
+            guide_count = count;
+        }
+    }
+    let guide_keys = preset_keys.get(&guide_preset).cloned().unwrap_or_default();
     let mut shots: Vec<_> = grouped
         .into_iter()
-        .map(|(key, (display_name, mut variants))| {
+        .filter(|(key, _)| guide_keys.contains(key))
+        .map(|(key, (fallback_name, mut variants))| {
             variants.sort_by(|a, b| natord::compare_ignore_case(&a.preset, &b.preset));
+            let display_name = variants
+                .iter()
+                .find(|variant| variant.preset == guide_preset)
+                .and_then(|variant| Path::new(&variant.path).file_stem())
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or(fallback_name);
             IndexedShot {
                 key,
                 display_name,
@@ -165,6 +196,7 @@ fn scan_library_impl(root: &Path) -> Result<LibraryIndex, String> {
     Ok(LibraryIndex {
         root: canonical.to_string_lossy().into_owned(),
         presets: preset_dirs.into_iter().map(|item| item.0).collect(),
+        guide_preset,
         shots,
         warnings,
     })
@@ -540,6 +572,47 @@ mod tests {
         fs::write(preset.join("nested/hidden.jpg"), b"x").unwrap();
         let result = scan_library_impl(temp.path()).unwrap();
         assert!(result.shots.is_empty());
+    }
+    #[test]
+    fn ignores_fujifilm_raw_and_sidecar_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let preset = temp.path().join("RAW");
+        fs::create_dir_all(&preset).unwrap();
+        fs::write(preset.join("DSCF0001.RAF"), b"raw").unwrap();
+        fs::write(preset.join("DSCF0001.FP2"), b"sidecar").unwrap();
+        fs::write(preset.join("DSCF0001.FP3"), b"sidecar").unwrap();
+        fs::write(preset.join("DSCF0002.jpg"), b"jpeg").unwrap();
+
+        let result = scan_library_impl(temp.path()).unwrap();
+        assert_eq!(result.shots.len(), 1);
+        assert_eq!(result.shots[0].display_name, "DSCF0002");
+        assert_eq!(result.shots[0].variants.len(), 1);
+    }
+    #[test]
+    fn largest_preset_is_the_guide_and_shots_use_natural_order() {
+        let temp = tempfile::tempdir().unwrap();
+        let smaller = temp.path().join("Preset 2");
+        let guide = temp.path().join("Preset 10");
+        fs::create_dir_all(&smaller).unwrap();
+        fs::create_dir_all(&guide).unwrap();
+        for name in ["DSCF2.jpg", "DSCF10.jpg", "ONLY_SMALLER.jpg"] {
+            fs::write(smaller.join(name), b"jpeg").unwrap();
+        }
+        for name in ["DSCF1.jpg", "DSCF2.jpg", "DSCF3.jpg", "DSCF10.jpg"] {
+            fs::write(guide.join(name), b"jpeg").unwrap();
+        }
+
+        let result = scan_library_impl(temp.path()).unwrap();
+        assert_eq!(result.guide_preset, "Preset 10");
+        assert_eq!(
+            result
+                .shots
+                .iter()
+                .map(|shot| shot.display_name.as_str())
+                .collect::<Vec<_>>(),
+            ["DSCF1", "DSCF2", "DSCF3", "DSCF10"]
+        );
+        assert!(result.shots.iter().all(|shot| shot.key != "only_smaller"));
     }
     #[test]
     fn creates_a_bounded_preview() {

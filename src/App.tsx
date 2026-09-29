@@ -1,12 +1,66 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, Save, Star, Trophy, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, PanelLeftClose, PanelLeftOpen, Save, Star, Trophy, X } from "lucide-react";
 import { createProject, mergeProject } from "./project";
-import type { ExportItem, ExportReport, IndexedShot, LibraryIndex, PreviewResult, Project, Variant } from "./types";
+import type { ExportItem, ExportReport, IndexedShot, LibraryIndex, PreviewResult, Project, ShotDecision, Variant } from "./types";
 
 type Viewport = { scale: number; x: number; y: number };
 const FIT: Viewport = { scale: 1, x: 0, y: 0 };
+
+function ShotThumbnail({ shot, guidePreset, decision, active, onSelect }: {
+  shot: IndexedShot;
+  guidePreset: string;
+  decision?: ShotDecision;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const element = useRef<HTMLButtonElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [src, setSrc] = useState<string>();
+  const guide = shot.variants.find((variant) => variant.preset === guidePreset);
+
+  useEffect(() => {
+    const target = element.current;
+    if (!target || visible) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "240px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible || !guide) return;
+    let current = true;
+    // Main comparison previews and adjacent-shot prefetch get a head start;
+    // thumbnails must never make opening or navigation feel slower.
+    const timer = window.setTimeout(() => {
+      invoke<PreviewResult>("get_preview", { path: guide.path, maxEdge: 320 })
+        .then((result) => { if (current) setSrc(convertFileSrc(result.cachePath)); })
+        .catch(() => undefined);
+    }, 650);
+    return () => { current = false; window.clearTimeout(timer); };
+  }, [visible, guide?.path]);
+
+  useEffect(() => {
+    if (active) element.current?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
+  return <button ref={element} className={`shot-thumbnail ${active ? "active" : ""}`} onClick={onSelect}>
+    <span className="thumbnail-frame">{src && <img src={src} alt="" loading="lazy" />}</span>
+    <span className="thumbnail-info">
+      <strong>{shot.displayName}</strong>
+      <small>
+        {decision?.rating ? `${decision.rating}★` : "—"}
+        {decision?.winnerPreset && <em>{decision.winnerPreset}</em>}
+      </small>
+    </span>
+  </button>;
+}
 
 function Preview({ variant, viewport, onViewport, panel, winner, onWinner }: {
   variant?: Variant; viewport: Viewport; onViewport: (v: Viewport) => void;
@@ -63,6 +117,7 @@ function Preview({ variant, viewport, onViewport, panel, winner, onWinner }: {
     <button className="winner-button" onClick={(event) => { event.stopPropagation(); onWinner(); }} title="Scegli questa variante">
       <Trophy size={15} fill={winner ? "currentColor" : "none"} />
     </button>
+    {winner && <div className="winner-badge"><Trophy size={13} fill="currentColor" /> Vincitore</div>}
     {src && <img draggable={false} src={src} alt={variant?.fileName ?? ""} style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }} />}
     {!variant && <div className="empty-panel"><X size={24}/><span>Variante non disponibile</span></div>}
     {loading && <div className="loading"><i /></div>}
@@ -77,6 +132,7 @@ export default function App() {
   const [projectPath, setProjectPath] = useState<string>();
   const [shotIndex, setShotIndex] = useState(0);
   const [viewport, setViewport] = useState<Viewport>(FIT);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
 
@@ -94,6 +150,11 @@ export default function App() {
     setShotIndex((current) => Math.min(index.shots.length - 1, Math.max(0, current + delta)));
     setViewport(FIT);
   }, [index]);
+
+  const selectShot = useCallback((position: number) => {
+    setShotIndex(position);
+    setViewport(FIT);
+  }, []);
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
@@ -216,19 +277,40 @@ export default function App() {
         {[1,2,3,4,5].map((rating) => <button key={rating} onClick={() => updateDecision({ rating: decision?.rating === rating ? 0 : rating, reviewed: true })} title={`${rating} stelle (Alt+${rating})`}><Star size={18} fill={(decision?.rating ?? 0) >= rating ? "currentColor" : "none"}/></button>)}
       </div>
       <div className="toolbar">
+        <button onClick={() => setSidebarOpen((open) => !open)} title={sidebarOpen ? "Nascondi elenco scatti" : "Mostra elenco scatti"}>
+          {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+        </button>
         <button onClick={openFolder} title="Apri cartella"><FolderOpen /></button>
         <button onClick={saveProject} title="Salva progetto"><Save /></button>
         <button onClick={() => setViewport(FIT)} title="Adatta"><Maximize2 /></button>
         <button className="export" onClick={exportWinners}><Download /> Esporta</button>
       </div>
     </header>
-    <div className={`comparison panels-${Math.max(1, panelPresets.length)}`}>
-      {panelPresets.map((preset, panel) => <div className="panel-wrap" key={`${panel}-${preset}`}>
-        <select value={preset} onChange={(event) => setProject({ ...project, panelPresets: project.panelPresets.map((value, i) => i === panel ? event.target.value : value) })}>
-          {project.presets.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
-        <Preview variant={variants[panel]} viewport={viewport} onViewport={setViewport} panel={panel + 1} winner={decision?.winnerPreset === preset} onWinner={() => updateDecision({ winnerPreset: preset, reviewed: true })}/>
-      </div>)}
+    <div className={`viewer-body ${sidebarOpen ? "" : "sidebar-hidden"}`}>
+      {sidebarOpen && <aside className="shot-sidebar">
+        <div className="sidebar-heading">
+          <strong>Scatti</strong>
+          <small>Guida: {index.guidePreset} · {index.shots.length}</small>
+        </div>
+        <nav className="thumbnail-list" aria-label="Elenco scatti">
+          {index.shots.map((candidate, position) => <ShotThumbnail
+            key={candidate.key}
+            shot={candidate}
+            guidePreset={index.guidePreset}
+            decision={project.decisions[candidate.key]}
+            active={position === shotIndex}
+            onSelect={() => selectShot(position)}
+          />)}
+        </nav>
+      </aside>}
+      <div className={`comparison panels-${Math.max(1, panelPresets.length)}`}>
+        {panelPresets.map((preset, panel) => <div className="panel-wrap" key={`${panel}-${preset}`}>
+          <select value={preset} onChange={(event) => setProject({ ...project, panelPresets: project.panelPresets.map((value, i) => i === panel ? event.target.value : value) })}>
+            {project.presets.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+          <Preview variant={variants[panel]} viewport={viewport} onViewport={setViewport} panel={panel + 1} winner={decision?.winnerPreset === preset} onWinner={() => updateDecision({ winnerPreset: preset, reviewed: true })}/>
+        </div>)}
+      </div>
     </div>
     <footer>
       <button aria-label="Scatto precedente" title="Scatto precedente (freccia sinistra)" disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>

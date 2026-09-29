@@ -7,7 +7,7 @@ export type Variant = {
 };
 
 export type IndexedShot = { key: string; displayName: string; variants: Variant[] };
-export type LibraryIndex = { root: string; presets: string[]; shots: IndexedShot[]; warnings: string[] };
+export type LibraryIndex = { root: string; presets: string[]; guidePreset: string; shots: IndexedShot[]; warnings: string[] };
 export type ShotDecision = { key: string; rating: number; winnerPreset: string | null; reviewed: boolean };
 
 export type Project = {
@@ -15,6 +15,7 @@ export type Project = {
   name: string;
   sourceRoot: string;
   presets: string[];
+  guidePreset: string;
   panelPresets: string[];
   decisions: Record<string, ShotDecision>;
   lastShotKey: string | null;
@@ -25,4 +26,3 @@ export type Project = {
 export type PreviewResult = { cachePath: string; width: number; height: number; cached: boolean };
 export type ExportItem = { sourcePath: string; outputName: string; rating: number };
 export type ExportReport = { exported: number; skipped: number; errors: string[] };
-
