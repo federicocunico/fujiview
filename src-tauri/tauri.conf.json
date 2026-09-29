@@ -31,6 +31,12 @@
     "active": true,
     "targets": ["nsis"],
     "shortDescription": "Fast side-by-side photo comparison",
-    "windows": { "webviewInstallMode": { "type": "downloadBootstrapper" } }
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "./windows/installer-hooks.nsh"
+      }
+    }
   }
 }

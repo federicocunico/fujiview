@@ -48,6 +48,8 @@ function Install-WingetPackage {
 $requirements = @(
     [pscustomobject]@{ Name = 'Node.js LTS'; Ready = (Test-Command 'node') -and (Test-Command 'npm'); Package = 'OpenJS.NodeJS.LTS'; Override = $null },
     [pscustomobject]@{ Name = 'Rust MSVC'; Ready = (Test-Command 'rustc') -and (Test-Command 'cargo'); Package = 'Rustlang.Rustup'; Override = $null },
+    [pscustomobject]@{ Name = 'CMake'; Ready = Test-Command 'cmake'; Package = 'Kitware.CMake'; Override = $null },
+    [pscustomobject]@{ Name = 'NASM'; Ready = Test-Command 'nasm'; Package = 'NASM.NASM'; Override = $null },
     [pscustomobject]@{ Name = 'Visual Studio C++ Build Tools'; Ready = Test-MsvcBuildTools; Package = 'Microsoft.VisualStudio.2022.BuildTools'; Override = '--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended' },
     [pscustomobject]@{ Name = 'Microsoft Edge WebView2 Runtime'; Ready = Test-WebView2; Package = 'Microsoft.EdgeWebView2Runtime'; Override = $null }
 )

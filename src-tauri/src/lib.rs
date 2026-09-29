@@ -1,24 +1,32 @@
 use fast_image_resize as fir;
-use image::{codecs::jpeg::JpegEncoder, DynamicImage, GenericImageView, ImageEncoder};
+use image::{DynamicImage, GenericImageView};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs,
-    io::{BufReader, BufWriter},
+    io::BufReader,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{Manager, State};
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex as AsyncMutex, Semaphore};
+use turbojpeg::{Decompressor, Image as TurboImage, PixelFormat, ScalingFactor, Subsamp};
 use xmp_toolkit::{xmp_ns, OpenFileOptions, XmpFile, XmpMeta, XmpValue};
 
 const CACHE_LIMIT_BYTES: i64 = 20 * 1024 * 1024 * 1024;
-const CACHE_VERSION: &str = "preview-v1";
+const CACHE_VERSION: &str = "preview-v2-turbojpeg";
 
 struct AppState {
-    decode_slots: Semaphore,
+    interactive_decode_slots: Semaphore,
+    prefetch_decode_slots: Semaphore,
+    thumbnail_decode_slots: Semaphore,
+    prefetch_generation: AtomicU64,
+    in_flight: AsyncMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
     cache_db: Mutex<Option<Connection>>,
 }
 
@@ -237,6 +245,55 @@ fn orient(image: DynamicImage, orientation: u32) -> DynamicImage {
     }
 }
 
+fn decode_jpeg_scaled(source: &Path, max_edge: u32) -> Result<DynamicImage, String> {
+    let jpeg = fs::read(source).map_err(|e| e.to_string())?;
+    let mut decompressor = Decompressor::new().map_err(|e| e.to_string())?;
+    let header = decompressor.read_header(&jpeg).map_err(|e| e.to_string())?;
+    let longest = header.width.max(header.height);
+    let target = (max_edge as usize).min(longest);
+    let scaling = if header.is_lossless {
+        ScalingFactor::ONE
+    } else {
+        Decompressor::supported_scaling_factors()
+            .into_iter()
+            .filter(|factor| factor.scale(longest) >= target && factor.scale(longest) <= longest)
+            .min_by_key(|factor| factor.scale(longest))
+            .unwrap_or(ScalingFactor::ONE)
+    };
+    decompressor
+        .set_scaling_factor(scaling)
+        .map_err(|e| e.to_string())?;
+    decompressor
+        .set_fast_upsample(true)
+        .map_err(|e| e.to_string())?;
+    let scaled = header.scaled(scaling);
+    let pitch = scaled
+        .width
+        .checked_mul(3)
+        .ok_or("Dimensioni JPEG non valide")?;
+    let buffer_len = pitch
+        .checked_mul(scaled.height)
+        .ok_or("Dimensioni JPEG non valide")?;
+    let mut decoded = TurboImage {
+        pixels: vec![0; buffer_len],
+        width: scaled.width,
+        pitch,
+        height: scaled.height,
+        format: PixelFormat::RGB,
+    };
+    decompressor
+        .decompress(&jpeg, decoded.as_deref_mut())
+        .map_err(|e| e.to_string())?;
+    let width = u32::try_from(scaled.width).map_err(|e| e.to_string())?;
+    let height = u32::try_from(scaled.height).map_err(|e| e.to_string())?;
+    let rgb = image::RgbImage::from_raw(width, height, decoded.pixels)
+        .ok_or("Buffer JPEG decodificato non valido")?;
+    Ok(orient(
+        DynamicImage::ImageRgb8(rgb),
+        exif_orientation(source),
+    ))
+}
+
 fn preview_key(path: &Path, max_edge: u32) -> Result<String, String> {
     let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
     let modified = metadata
@@ -261,13 +318,18 @@ fn preview_key(path: &Path, max_edge: u32) -> Result<String, String> {
 }
 
 fn build_preview(source: &Path, destination: &Path, max_edge: u32) -> Result<(u32, u32), String> {
-    let decoded = image::ImageReader::open(source)
-        .map_err(|e| e.to_string())?
-        .with_guessed_format()
-        .map_err(|e| e.to_string())?
-        .decode()
-        .map_err(|e| e.to_string())?;
-    let decoded = orient(decoded, exif_orientation(source));
+    let decoded = match image_extension(source).as_deref() {
+        Some("jpg" | "jpeg") => decode_jpeg_scaled(source, max_edge)?,
+        _ => {
+            let image = image::ImageReader::open(source)
+                .map_err(|e| e.to_string())?
+                .with_guessed_format()
+                .map_err(|e| e.to_string())?
+                .decode()
+                .map_err(|e| e.to_string())?;
+            orient(image, exif_orientation(source))
+        }
+    };
     let (width, height) = decoded.dimensions();
     let ratio = (max_edge as f64 / width.max(height) as f64).min(1.0);
     let out_width = ((width as f64 * ratio).round() as u32).max(1);
@@ -288,15 +350,15 @@ fn build_preview(source: &Path, destination: &Path, max_edge: u32) -> Result<(u3
         )
         .map_err(|e| e.to_string())?;
     let temp = destination.with_extension("tmp");
-    let file = fs::File::create(&temp).map_err(|e| e.to_string())?;
-    JpegEncoder::new_with_quality(BufWriter::new(file), 90)
-        .write_image(
-            dst.buffer(),
-            out_width,
-            out_height,
-            image::ExtendedColorType::Rgb8,
-        )
-        .map_err(|e| e.to_string())?;
+    let preview = TurboImage {
+        pixels: dst.buffer(),
+        width: out_width as usize,
+        pitch: out_width as usize * 3,
+        height: out_height as usize,
+        format: PixelFormat::RGB,
+    };
+    let encoded = turbojpeg::compress(preview, 90, Subsamp::Sub2x2).map_err(|e| e.to_string())?;
+    fs::write(&temp, &encoded).map_err(|e| e.to_string())?;
     fs::rename(&temp, destination).map_err(|e| e.to_string())?;
     Ok((out_width, out_height))
 }
@@ -359,6 +421,8 @@ async fn get_preview(
     state: State<'_, AppState>,
     path: String,
     max_edge: u32,
+    priority: Option<String>,
+    generation: Option<u64>,
 ) -> Result<PreviewResult, String> {
     let max_edge = max_edge.clamp(384, 8192);
     let source = PathBuf::from(path);
@@ -380,12 +444,54 @@ async fn get_preview(
             cached: true,
         });
     }
-    let _permit = state
-        .decode_slots
-        .acquire()
-        .await
-        .map_err(|e| e.to_string())?;
-    let source_copy = source.clone();
+    let is_prefetch = priority.as_deref() == Some("prefetch");
+    let request_generation = generation.unwrap_or(0);
+    if is_prefetch {
+        let previous = state
+            .prefetch_generation
+            .fetch_max(request_generation, Ordering::AcqRel);
+        if request_generation < previous {
+            return Err("Prefetch superato".into());
+        }
+    }
+    let slots = match priority.as_deref() {
+        Some("thumbnail") => &state.thumbnail_decode_slots,
+        Some("prefetch") => &state.prefetch_decode_slots,
+        _ => &state.interactive_decode_slots,
+    };
+    let _permit = slots.acquire().await.map_err(|e| e.to_string())?;
+    if is_prefetch && request_generation < state.prefetch_generation.load(Ordering::Acquire) {
+        return Err("Prefetch superato".into());
+    }
+    let image_lock = {
+        let mut in_flight = state.in_flight.lock().await;
+        Arc::clone(
+            in_flight
+                .entry(key.clone())
+                .or_insert_with(|| Arc::new(AsyncMutex::new(()))),
+        )
+    };
+    let _image_guard = image_lock.lock().await;
+    // Another request may have completed the same preview while this one was queued.
+    if destination.exists() {
+        let (width, height) = image::image_dimensions(&destination).map_err(|e| e.to_string())?;
+        touch_cache(&state, &key, &destination);
+        return Ok(PreviewResult {
+            cache_path: destination.to_string_lossy().into_owned(),
+            width,
+            height,
+            cached: true,
+        });
+    }
+    let source_copy = if priority.as_deref() == Some("thumbnail") {
+        let larger = preview_key(&source, 2048)
+            .map(|larger_key| cache_dir.join(format!("{larger_key}.jpg")))
+            .ok()
+            .filter(|path| path.exists());
+        larger.unwrap_or_else(|| source.clone())
+    } else {
+        source.clone()
+    };
     let destination_copy = destination.clone();
     let (width, height) = tauri::async_runtime::spawn_blocking(move || {
         build_preview(&source_copy, &destination_copy, max_edge)
@@ -550,6 +656,8 @@ async fn export_winners(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::{codecs::jpeg::JpegEncoder, ImageEncoder};
+    use std::time::Instant;
     #[test]
     fn groups_extensions_and_case_by_stem() {
         let temp = tempfile::tempdir().unwrap();
@@ -641,13 +749,63 @@ mod tests {
         let meta = XmpMeta::from_file(&source).unwrap();
         assert_eq!(meta.property_i32(xmp_ns::XMP, "Rating").unwrap().value, 4);
     }
+
+    #[test]
+    #[ignore = "manual benchmark: set FUJIVIEW_BENCH_IMAGE"]
+    fn benchmark_real_preview_pipeline() {
+        let source = PathBuf::from(std::env::var("FUJIVIEW_BENCH_IMAGE").unwrap());
+        let temp = tempfile::tempdir().unwrap();
+        for edge in [320, 2048, 4096] {
+            let destination = temp.path().join(format!("preview-{edge}.jpg"));
+            let started = Instant::now();
+            let dimensions = build_preview(&source, &destination, edge).unwrap();
+            eprintln!(
+                "edge={edge} dimensions={dimensions:?} elapsed={:?}",
+                started.elapsed()
+            );
+        }
+        let root = source.parent().unwrap().parent().unwrap();
+        let file_name = source.file_name().unwrap();
+        let variants: Vec<_> = fs::read_dir(root)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.path().join(file_name))
+            .filter(|path| path.is_file() && image_extension(path).is_some())
+            .collect();
+        let started = Instant::now();
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = variants
+                .iter()
+                .enumerate()
+                .map(|(index, variant)| {
+                    let destination = temp.path().join(format!("split-{index}.jpg"));
+                    scope.spawn(move || build_preview(variant, &destination, 2048).unwrap())
+                })
+                .collect();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
+        eprintln!(
+            "split_variants={} edge=2048 elapsed={:?}",
+            variants.len(),
+            started.elapsed()
+        );
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState { decode_slots: Semaphore::new(2), cache_db: Mutex::new(None) })
+        .manage(AppState {
+            interactive_decode_slots: Semaphore::new(4),
+            prefetch_decode_slots: Semaphore::new(2),
+            thumbnail_decode_slots: Semaphore::new(1),
+            prefetch_generation: AtomicU64::new(0),
+            in_flight: AsyncMutex::new(HashMap::new()),
+            cache_db: Mutex::new(None),
+        })
         .setup(|app| {
             let cache_dir = app.path().app_cache_dir()?.join("previews");
             fs::create_dir_all(&cache_dir)?;

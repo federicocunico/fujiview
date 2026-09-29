@@ -29,6 +29,7 @@ try {
 
     npm version $Version --no-git-tag-version --allow-same-version
     if ($LASTEXITCODE -ne 0) { throw 'Aggiornamento package.json/package-lock.json non riuscito.' }
+    Set-Content -LiteralPath (Join-Path $repoRoot 'VERSION') -Value $Version -Encoding ascii
 
     $tauriPath = Join-Path $repoRoot 'src-tauri/tauri.conf.json'
     $tauriText = Get-Content -Raw -LiteralPath $tauriPath
@@ -52,7 +53,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Build installer locale fallita.' }
     }
 
-    git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+    git add VERSION package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
     git commit -m "chore(release): v$Version"
     if ($LASTEXITCODE -ne 0) { throw 'Commit release non riuscito.' }
     git tag -a $tag -m "FujiView $tag"

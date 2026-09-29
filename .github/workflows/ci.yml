@@ -19,8 +19,10 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
+      - name: Check application versions
+        shell: pwsh
+        run: ./scripts/check-version.ps1
       - run: npm test
       - run: npm run build
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: npm run tauri build
-

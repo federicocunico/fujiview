@@ -39,10 +39,10 @@ function ShotThumbnail({ shot, guidePreset, decision, active, onSelect }: {
     // Main comparison previews and adjacent-shot prefetch get a head start;
     // thumbnails must never make opening or navigation feel slower.
     const timer = window.setTimeout(() => {
-      invoke<PreviewResult>("get_preview", { path: guide.path, maxEdge: 320 })
+      invoke<PreviewResult>("get_preview", { path: guide.path, maxEdge: 320, priority: "thumbnail", generation: null })
         .then((result) => { if (current) setSrc(convertFileSrc(result.cachePath)); })
         .catch(() => undefined);
-    }, 650);
+    }, 1200);
     return () => { current = false; window.clearTimeout(timer); };
   }, [visible, guide?.path]);
 
@@ -51,7 +51,7 @@ function ShotThumbnail({ shot, guidePreset, decision, active, onSelect }: {
   }, [active]);
 
   return <button ref={element} className={`shot-thumbnail ${active ? "active" : ""}`} onClick={onSelect}>
-    <span className="thumbnail-frame">{src && <img src={src} alt="" loading="lazy" />}</span>
+    <span className="thumbnail-frame">{src && <img src={src} alt="" loading="lazy" decoding="async" />}</span>
     <span className="thumbnail-info">
       <strong>{shot.displayName}</strong>
       <small>
@@ -77,12 +77,13 @@ function Preview({ variant, viewport, onViewport, panel, winner, onWinner }: {
     let active = true;
     setError(undefined);
     if (!variant) { setSrc(undefined); return; }
-    setLoading(true);
-    invoke<PreviewResult>("get_preview", { path: variant.path, maxEdge: edge })
+    setLoading(false);
+    const loadingTimer = window.setTimeout(() => { if (active) setLoading(true); }, 100);
+    invoke<PreviewResult>("get_preview", { path: variant.path, maxEdge: edge, priority: "interactive", generation: null })
       .then((result) => { if (active) setSrc(convertFileSrc(result.cachePath)); })
       .catch((reason) => { if (active) setError(String(reason)); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+      .finally(() => { window.clearTimeout(loadingTimer); if (active) setLoading(false); });
+    return () => { active = false; window.clearTimeout(loadingTimer); };
   }, [variant?.path, edge]);
 
   return <div
@@ -118,7 +119,7 @@ function Preview({ variant, viewport, onViewport, panel, winner, onWinner }: {
       <Trophy size={15} fill={winner ? "currentColor" : "none"} />
     </button>
     {winner && <div className="winner-badge"><Trophy size={13} fill="currentColor" /> Vincitore</div>}
-    {src && <img draggable={false} src={src} alt={variant?.fileName ?? ""} style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }} />}
+    {src && <img draggable={false} decoding="async" src={src} alt={variant?.fileName ?? ""} style={{ transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})` }} />}
     {!variant && <div className="empty-panel"><X size={24}/><span>Variante non disponibile</span></div>}
     {loading && <div className="loading"><i /></div>}
     {error && <div className="image-error">{error}</div>}
@@ -135,6 +136,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const prefetchGeneration = useRef(0);
 
   const shot = index?.shots[shotIndex];
   const decision = shot && project?.decisions[shot.key];
@@ -190,15 +192,18 @@ export default function App() {
 
   useEffect(() => {
     if (!index || !project) return;
-    const adjacent = [index.shots[shotIndex - 1], index.shots[shotIndex + 1]].filter(Boolean);
+    const adjacent = [1, -1, 2, 3, -2, 4]
+      .map((offset) => index.shots[shotIndex + offset])
+      .filter(Boolean);
     const timer = window.setTimeout(() => {
+      const generation = ++prefetchGeneration.current;
       for (const candidate of adjacent) {
         for (const preset of project.panelPresets) {
           const variant = candidate.variants.find((item) => item.preset === preset);
-          if (variant) void invoke("get_preview", { path: variant.path, maxEdge: 2048 }).catch(() => undefined);
+          if (variant) void invoke("get_preview", { path: variant.path, maxEdge: 2048, priority: "prefetch", generation }).catch(() => undefined);
         }
       }
-    }, 250);
+    }, 60);
     return () => window.clearTimeout(timer);
   }, [index, project?.panelPresets, shotIndex]);
 
