@@ -1,3 +1,6 @@
+pub mod camera;
+pub mod variants;
+
 use fast_image_resize as fir;
 use image::{DynamicImage, GenericImageView};
 use rusqlite::{params, Connection};
@@ -208,6 +211,13 @@ fn scan_library_impl(root: &Path) -> Result<LibraryIndex, String> {
         shots,
         warnings,
     })
+}
+
+/// (preset count, shot count) of a library, for tests in other modules.
+#[cfg(test)]
+pub(crate) fn scan_library_for_tests(root: &Path) -> Result<(usize, usize), String> {
+    let index = scan_library_impl(root)?;
+    Ok((index.presets.len(), index.shots.len()))
 }
 
 #[tauri::command]
@@ -812,9 +822,25 @@ pub fn run() {
             let db = Connection::open(app.path().app_cache_dir()?.join("cache.db"))?;
             db.execute_batch("CREATE TABLE IF NOT EXISTS cache_entries(key TEXT PRIMARY KEY,path TEXT NOT NULL,bytes INTEGER NOT NULL,last_access INTEGER NOT NULL);")?;
             *app.state::<AppState>().cache_db.lock().unwrap() = Some(db);
+            app.manage(Arc::new(variants::service::VariantService::start(app.handle().clone())));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![scan_library, get_preview, save_project, load_project, export_winners])
+        .invoke_handler(tauri::generate_handler![
+            scan_library,
+            get_preview,
+            save_project,
+            load_project,
+            export_winners,
+            variants::service::camera_status,
+            variants::service::camera_status_cached,
+            variants::service::camera_diagnostics,
+            variants::service::camera_log,
+            variants::service::camera_presets,
+            variants::service::plan_variants,
+            variants::service::start_variants,
+            variants::service::cancel_variants,
+            variants::service::resume_variants
+        ])
         .run(tauri::generate_context!())
         .expect("error while running FujiView");
 }

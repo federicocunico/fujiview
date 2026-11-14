@@ -1130,6 +1130,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "turbojpeg",
+ "windows",
  "xmp_toolkit",
 ]
 

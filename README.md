@@ -47,6 +47,32 @@ Open FujiView, select `photos`, and start comparing. The preset folder containin
 
 RAF, FP2, FP3, and other unsupported files are ignored. A missing export in another preset is shown as an unavailable variant instead of removing the shot from the guide.
 
+## Generating variants from the camera
+
+FujiView can produce the preset variants itself by sending your Fujifilm RAF files to the camera over USB and letting the camera render each one with its own custom presets (C1-C7) plus an "as shot" version.
+
+Camera setup:
+
+1. On the camera open `MENU > SET UP > CONNECTION SETTING > USB MODE` and choose `USB RAW CONV./BACKUP RESTORE`.
+2. Disable auto power off so the camera does not sleep during a long batch.
+3. Close X RAW Studio (and any other software using the camera).
+4. All RAF files must come from the same camera body as the one connected.
+
+Connect the camera, click "Genera varianti dalla camera", pick a RAF folder or individual files, choose the presets, and start. Before starting, FujiView shows the number of conversions, the estimated disk space against the free space (generation is blocked if there is not enough), and an estimated time. Typical timings on an X-T5 (firmware 4.31) with 87 MB uncompressed RAFs: about 2.3 s to upload each RAF, then about 1.5–2.5 s per variant. A batch of 5 RAFs × 8 presets took 2.4 s per variant on average, and each full-size JPEG is about 26 MB.
+
+Output layout:
+
+```text
+<source>/FujiView varianti/
+  <C1 name>/DSCF0001.jpg
+  <C2 name>/DSCF0001.jpg
+  Come scattato/DSCF0001.jpg
+```
+
+Variants already present are skipped, so an interrupted or paused job can be resumed without redoing finished work; enable "Sovrascrivi varianti esistenti" to regenerate them. Original RAF files are never modified. Generation pauses if free disk space runs out or the camera disconnects, and can be resumed afterwards. When finished, open the output folder directly for comparison.
+
+For development, set `FUJIVIEW_FAKE_CAMERA=1` to enable a simulated camera.
+
 ## Controls
 
 - Click a comparison panel or press `1`–`4` to select its preset as the winner.
@@ -113,3 +139,10 @@ make release VERSION=0.2.0
 The release script updates every version file, runs the test suite, builds the installer, commits and tags the release, and pushes it to GitHub. A `vX.Y.Z` tag triggers the `Release Windows` workflow, which publishes the setup executable in a GitHub Release.
 
 The installer is not Authenticode-signed yet, so Windows SmartScreen may display a warning.
+
+## Credits
+
+Camera protocol details were learned from these references:
+
+- [fujifilm-ptp-reference](https://github.com/zgrimz/fujifilm-ptp-reference) (CC BY 4.0 / MIT)
+- [libfuji](https://github.com/petabyt/libfuji) (MIT)

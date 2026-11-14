@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, PanelLeftClose, PanelLeftOpen, Save, Star, Trophy, X } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, PanelLeftClose, PanelLeftOpen, Save, Star, Trophy, X } from "lucide-react";
 import { createProject, mergeProject } from "./project";
+import { VariantGenerator } from "./VariantGenerator";
+import { CameraChip } from "./CameraDiagnostics";
 import type { ExportItem, ExportReport, IndexedShot, LibraryIndex, PreviewResult, Project, ShotDecision, Variant } from "./types";
 
 type Viewport = { scale: number; x: number; y: number };
@@ -136,6 +138,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [generatorOpen, setGeneratorOpen] = useState(false);
   const prefetchGeneration = useRef(0);
 
   const shot = index?.shots[shotIndex];
@@ -264,15 +267,19 @@ export default function App() {
   const variants = useMemo(() => panelPresets.map((preset) => shot?.variants.find((variant) => variant.preset === preset)), [panelPresets, shot]);
   const decided = project ? Object.values(project.decisions).filter((item) => item.winnerPreset).length : 0;
 
+  const generator = generatorOpen && <VariantGenerator onClose={() => setGeneratorOpen(false)} onOpenLibrary={(dir) => { setGeneratorOpen(false); void scan(dir); }} />;
+
   if (!index || !project) return <main className="welcome">
     <div className="brand"><span>F</span><div><h1>FujiView</h1><p>Confronta. Scegli. Esporta.</p></div></div>
     <section>
       <button className="primary large" onClick={openFolder}><FolderOpen /> Apri cartella preset</button>
       <button className="secondary large" onClick={openProject}>Apri progetto</button>
+      <button className="secondary large" onClick={() => setGeneratorOpen(true)}><Camera /> Genera varianti dalla camera</button>
       <p className="hint">Ogni sottocartella viene trattata come un preset.<br/>JPEG e TIFF con lo stesso nome vengono affiancati.</p>
       {notice && <div className="notice">{notice}</div>}
     </section>
     {busy && <div className="busy-overlay"><i />{busy}</div>}
+    {generator}
   </main>;
 
   return <main className="workspace">
@@ -286,6 +293,7 @@ export default function App() {
           {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
         </button>
         <button onClick={openFolder} title="Apri cartella"><FolderOpen /></button>
+        <button onClick={() => setGeneratorOpen(true)} title="Genera varianti dalla camera"><Camera /><CameraChip /></button>
         <button onClick={saveProject} title="Salva progetto"><Save /></button>
         <button onClick={() => setViewport(FIT)} title="Adatta"><Maximize2 /></button>
         <button className="export" onClick={exportWinners}><Download /> Esporta</button>
@@ -326,5 +334,6 @@ export default function App() {
     </footer>
     {notice && <button className="toast" onClick={() => setNotice(undefined)}>{notice}<X size={15}/></button>}
     {busy && <div className="busy-overlay"><i />{busy}</div>}
+    {generator}
   </main>;
 }
