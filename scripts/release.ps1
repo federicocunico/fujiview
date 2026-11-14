@@ -31,15 +31,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Aggiornamento package.json/package-lock.json non riuscito.' }
     Set-Content -LiteralPath (Join-Path $repoRoot 'VERSION') -Value $Version -Encoding ascii
 
+    # Windows PowerShell 5.1 writes a BOM with -Encoding utf8: use .NET instead.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     $tauriPath = Join-Path $repoRoot 'src-tauri/tauri.conf.json'
     $tauriText = Get-Content -Raw -LiteralPath $tauriPath
-    $tauriText = [regex]::Replace($tauriText, '("version"\s*:\s*")[^"]+("\s*,)', "`$1$Version`$2", 1)
-    Set-Content -LiteralPath $tauriPath -Value $tauriText -Encoding utf8
+    $tauriText = [regex]::Replace($tauriText, '("version"\s*:\s*")[^"]+("\s*,)', ('${1}' + $Version + '${2}'), 1)
+    [System.IO.File]::WriteAllText($tauriPath, $tauriText, $utf8NoBom)
 
     $cargoPath = Join-Path $repoRoot 'src-tauri/Cargo.toml'
     $cargoText = Get-Content -Raw -LiteralPath $cargoPath
-    $cargoText = [regex]::Replace($cargoText, '(?m)^(version\s*=\s*")[^"]+(")', "`$1$Version`$2", 1)
-    Set-Content -LiteralPath $cargoPath -Value $cargoText -Encoding utf8
+    $cargoText = [regex]::Replace($cargoText, '(?m)^(version\s*=\s*")[^"]+(")', ('${1}' + $Version + '${2}'), 1)
+    [System.IO.File]::WriteAllText($cargoPath, $cargoText, $utf8NoBom)
 
     & (Join-Path $PSScriptRoot 'check-version.ps1') -Tag $tag
 
