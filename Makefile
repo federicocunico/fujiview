@@ -5,7 +5,7 @@ POWERSHELL := powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
 .PHONY: help doctor setup install dev build build-web installer test check fmt clean distclean release
 
 help:
-	@$(POWERSHELL) -Command "Write-Host 'FujiView targets:'; Write-Host '  make setup                 Install/check Windows prerequisites and npm packages'; Write-Host '  make install               Setup, build, replace any old version, and install locally'; Write-Host '  make doctor                Check prerequisites without installing'; Write-Host '  make dev                   Start the Tauri development app'; Write-Host '  make build                 Build the Windows NSIS installer'; Write-Host '  make build-web             Build only the web frontend'; Write-Host '  make test                  Run frontend and Rust tests'; Write-Host '  make check                 Run all non-mutating validation'; Write-Host '  make fmt                   Format Rust sources'; Write-Host '  make clean                 Remove generated build outputs'; Write-Host '  make distclean             Also remove node_modules'; Write-Host '  make release VERSION=x.y.z Test, tag, push and publish a release'"
+	@$(POWERSHELL) -Command "Write-Host 'FujiView targets:'; Write-Host '  make setup                 Install/check Windows prerequisites and npm packages'; Write-Host '  make install               Setup, build, replace any old version, and install locally'; Write-Host '  make doctor                Check prerequisites without installing'; Write-Host '  make dev                   Start the Tauri development app'; Write-Host '  make build                 Build the Windows NSIS installer'; Write-Host '  make installer             Build and copy the installer to ./installer'; Write-Host '  make build-web             Build only the web frontend'; Write-Host '  make test                  Run frontend and Rust tests'; Write-Host '  make check                 Run all non-mutating validation'; Write-Host '  make fmt                   Format Rust sources'; Write-Host '  make clean                 Remove generated build outputs'; Write-Host '  make distclean             Also remove node_modules'; Write-Host '  make release VERSION=x.y.z Test, tag, push and publish a release'"
 
 doctor:
 	$(POWERSHELL) -File scripts/bootstrap.ps1 -CheckOnly
@@ -19,8 +19,11 @@ install: build
 dev: setup
 	npm run tauri dev
 
-build installer: setup
+build: setup
 	npm run tauri build
+
+installer: build
+	$(POWERSHELL) -File scripts/collect-installer.ps1
 
 build-web: setup
 	npm run build

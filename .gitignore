@@ -1,6 +1,7 @@
 node_modules/
 dist/
 src-tauri/target/
+installer/
 .vite/
 *.fujiview.bak
 node_modules/.fujiview-lock.sha256

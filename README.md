@@ -109,6 +109,7 @@ make setup       # install/check prerequisites and project dependencies
 make doctor      # check prerequisites without installing anything
 make dev         # start the Tauri development application
 make build       # build the optimized Windows NSIS installer
+make installer   # build and copy the setup to ./installer (gitignored)
 make install     # setup, build, replace the old version, and install locally
 make build-web   # build only the React frontend
 make test        # run frontend and Rust tests

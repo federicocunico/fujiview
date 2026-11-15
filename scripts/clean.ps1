@@ -5,7 +5,8 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Split-Path -Parent $PSScriptRoot)).Path
 $targets = @(
     (Join-Path $repoRoot 'dist'),
-    (Join-Path $repoRoot 'src-tauri/target')
+    (Join-Path $repoRoot 'src-tauri/target'),
+    (Join-Path $repoRoot 'installer')
 )
 if ($IncludeDependencies) { $targets += (Join-Path $repoRoot 'node_modules') }
 
