@@ -17,6 +17,7 @@ export function VariantGenerator({ onClose, onOpenLibrary }: { onClose: () => vo
   const [overwrite, setOverwrite] = useState(false);
   const [plan, setPlan] = useState<VariantPlan>();
   const [planError, setPlanError] = useState<string>();
+  const [planning, setPlanning] = useState(false);
   const [view, setView] = useState<View>("setup");
   const [progress, setProgress] = useState<VariantProgress>();
   const [report, setReport] = useState<VariantReport>();
@@ -58,12 +59,14 @@ export function VariantGenerator({ onClose, onOpenLibrary }: { onClose: () => vo
 
   useEffect(() => {
     if (view !== "setup") return;
-    if (!sources.length || !selected.length) { setPlan(undefined); setPlanError(undefined); return; }
+    if (!sources.length || !selected.length) { setPlan(undefined); setPlanError(undefined); setPlanning(false); return; }
     let current = true;
+    setPlanning(true);
     const timer = window.setTimeout(() => {
       invoke<VariantPlan>("plan_variants", { request })
         .then((result) => { if (current) { setPlan(result); setPlanError(undefined); } })
-        .catch((reason) => { if (current) { setPlan(undefined); setPlanError(String(reason)); } });
+        .catch((reason) => { if (current) { setPlan(undefined); setPlanError(String(reason)); } })
+        .finally(() => { if (current) setPlanning(false); });
     }, 300);
     return () => { current = false; window.clearTimeout(timer); };
   }, [request, view, sources.length, selected.length]);
@@ -85,7 +88,7 @@ export function VariantGenerator({ onClose, onOpenLibrary }: { onClose: () => vo
   const running = view === "running" && progress?.state !== "paused";
   const ready = canGenerate(status, diagnostics);
   const pending = plan?.pendingConversions ?? 0;
-  const canStart = ready && !!plan && plan.enoughSpace && pending > 0;
+  const canStart = ready && !planning && !!plan && plan.enoughSpace && pending > 0;
 
   const start = async () => {
     setError(undefined); setReport(undefined); setProgress(undefined);
@@ -141,7 +144,10 @@ export function VariantGenerator({ onClose, onOpenLibrary }: { onClose: () => vo
         </section>
 
         {planError && <div className="notice">{planError}</div>}
-        {plan && <section className="vg-summary">
+        {planning && !plan && <section className="vg-summary"><div>Calcolo delle varianti già presenti…</div></section>}
+        {plan && <section className="vg-summary" aria-busy={planning} style={planning ? { opacity: 0.5 } : undefined}>
+          {planning && <div>Ricalcolo delle varianti già presenti…</div>}
+          <div>Varianti in: <span className="vg-path">{plan.outputDir}</span></div>
           <div><b>{plan.rafCount}</b> RAF · <b>{plan.totalConversions}</b> conversioni · <b>{plan.alreadyDone}</b> già fatte (saltate) · <b>{plan.pendingConversions}</b> da fare</div>
           <div>Spazio stimato {formatBytes(plan.estimatedBytes)} su {formatBytes(plan.freeBytes)} liberi · Tempo stimato {formatDuration(plan.estimatedSeconds)}</div>
           {plan.warnings.map((warning) => <div key={warning} className="vg-warn">{warning}</div>)}

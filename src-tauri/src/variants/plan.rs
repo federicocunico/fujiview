@@ -200,15 +200,52 @@ pub fn collect_rafs(sources: &[String]) -> Result<(PathBuf, Vec<PathBuf>), Strin
 }
 
 /// A variant is complete when the JPEG exists, is non-empty and ends with EOI.
+/// Reads only the first and last bytes: planning checks hundreds of ~26 MB files.
 pub fn variant_complete(path: &Path) -> bool {
-    let Ok(bytes) = fs::read(path) else {
-        return false;
+    use std::io::{Read, Seek, SeekFrom};
+    let check = || -> std::io::Result<bool> {
+        let mut file = fs::File::open(path)?;
+        let len = file.metadata()?.len();
+        if len < 4 {
+            return Ok(false);
+        }
+        let mut head = [0u8; 2];
+        file.read_exact(&mut head)?;
+        if head != [0xFF, 0xD8] {
+            return Ok(false);
+        }
+        let tail_len = len.min(64);
+        file.seek(SeekFrom::Start(len - tail_len))?;
+        let mut tail = vec![0u8; tail_len as usize];
+        file.read_exact(&mut tail)?;
+        Ok(tail.windows(2).any(|w| w == [0xFF, 0xD9]))
     };
-    if bytes.len() < 4 || bytes[..2] != [0xFF, 0xD8] {
-        return false;
+    check().unwrap_or(false)
+}
+
+fn has_variant_folders(dir: &Path) -> bool {
+    fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .any(|e| e.path().join(MANIFEST).is_file())
+        })
+        .unwrap_or(false)
+}
+
+/// The output folder actually used. When the chosen folder holds no variants
+/// but its `FujiView varianti` subfolder does (the user picked the RAF folder
+/// itself), use the subfolder so existing variants are found and skipped.
+pub fn resolve_output_dir(chosen: &Path) -> (PathBuf, Option<String>) {
+    let nested = chosen.join(DEFAULT_OUTPUT_DIR);
+    if !has_variant_folders(chosen) && has_variant_folders(&nested) {
+        let note = format!(
+            "La cartella scelta contiene già \"{DEFAULT_OUTPUT_DIR}\" con varianti esistenti: uso quella."
+        );
+        (nested, Some(note))
+    } else {
+        (chosen.to_path_buf(), None)
     }
-    let tail = &bytes[bytes.len().saturating_sub(64)..];
-    tail.windows(2).any(|w| w == [0xFF, 0xD9])
 }
 
 /// Pick the folder for a preset: the plain name, or `name (n)` when the plain
@@ -245,15 +282,19 @@ fn resolve_folder(output: &Path, preset: &PresetDef, taken: &[String]) -> (Strin
 
 pub fn build_plan(request: &VariantRequest, presets: &[PresetDef]) -> Result<Plan, String> {
     let (source_root, rafs) = collect_rafs(&request.sources)?;
+    let mut warnings = Vec::new();
     let output_dir = match request
         .output_dir
         .as_deref()
         .filter(|s| !s.trim().is_empty())
     {
-        Some(dir) => PathBuf::from(dir),
+        Some(dir) => {
+            let (dir, note) = resolve_output_dir(Path::new(dir));
+            warnings.extend(note);
+            dir
+        }
         None => source_root.join(DEFAULT_OUTPUT_DIR),
     };
-    let mut warnings = Vec::new();
     let mut targets: Vec<PresetTarget> = Vec::new();
     for id in &request.preset_ids {
         let Some(preset) = presets.iter().find(|p| &p.id == id) else {
@@ -384,6 +425,20 @@ mod tests {
         fs::write(out.join("DSCF0002.jpg"), &JPEG[..4]).unwrap(); // truncated: not complete
         let plan = build_plan(&request(dir.path(), &["C1"]), &presets()).unwrap();
         assert_eq!((plan.already_done, plan.pending.len()), (1, 1));
+        // Choosing the RAF folder itself as output still finds the variants.
+        let mut raf_folder = request(dir.path(), &["C1"]);
+        raf_folder.output_dir = Some(dir.path().to_string_lossy().into_owned());
+        let plan = build_plan(&raf_folder, &presets()).unwrap();
+        assert_eq!(plan.output_dir, dir.path().join(DEFAULT_OUTPUT_DIR));
+        assert_eq!((plan.already_done, plan.pending.len()), (1, 1));
+        assert_eq!(plan.warnings.len(), 1, "{:?}", plan.warnings);
+        // An unrelated empty output folder is used as is.
+        let elsewhere = tempfile::tempdir().unwrap();
+        let mut other = request(dir.path(), &["C1"]);
+        other.output_dir = Some(elsewhere.path().to_string_lossy().into_owned());
+        let plan = build_plan(&other, &presets()).unwrap();
+        assert_eq!(plan.output_dir, elsewhere.path());
+        assert_eq!(plan.already_done, 0);
         let mut again = request(dir.path(), &["C1"]);
         again.overwrite = true;
         assert_eq!(build_plan(&again, &presets()).unwrap().pending.len(), 2);
