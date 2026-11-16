@@ -21,6 +21,15 @@ describe("mergeProject", () => {
     const merged = mergeProject(saved, index(["a", "b", "c", "d", "e", "f"], "a"));
     expect(merged.panelPresets).toEqual(["a", "b", "c", "d", "e", "f"]);
   });
+
+  it("restores the saved panel order, winners and last shot", () => {
+    const saved = { ...createProject(index(["a", "b", "c"], "a")), panelPresets: ["c", "a", "b"], lastShotKey: "dscf2",
+      decisions: { dscf2: { key: "dscf2", rating: 4, winnerPreset: "c", reviewed: true } } };
+    const merged = mergeProject(saved, index(["a", "b", "c"], "a"));
+    expect(merged.panelPresets).toEqual(["c", "a", "b"]);
+    expect(merged.lastShotKey).toBe("dscf2");
+    expect(merged.decisions.dscf2).toEqual({ key: "dscf2", rating: 4, winnerPreset: "c", reviewed: true });
+  });
 });
 
 describe("preset visibility", () => {

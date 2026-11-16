@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Camera } from "lucide-react";
 import { CameraPanel, useCameraMonitor } from "./CameraDiagnostics";
+import { loadSettings, updateSettings } from "./settings";
 import type { CameraPreset, VariantPlan, VariantProgress, VariantReport, VariantRequest } from "./types";
 import { canGenerate, defaultOutputLabel, formatBytes, formatDuration, progressPercent, togglePreset } from "./variants";
 
@@ -29,7 +30,10 @@ export function VariantGenerator({ onClose, onOpenLibrary }: { onClose: () => vo
     try {
       const list = await invoke<CameraPreset[]>("camera_presets");
       setPresets(list);
-      setSelected(list.map((preset) => preset.id));
+      // Restore the presets ticked last time (all of them the first time).
+      const saved = (await loadSettings()).generatorPresetIds;
+      const restored = list.map((preset) => preset.id).filter((id) => !saved || saved.includes(id));
+      setSelected(restored.length ? restored : list.map((preset) => preset.id));
     } catch (reason) { setError(String(reason)); }
   }, []);
 
@@ -119,7 +123,7 @@ export function VariantGenerator({ onClose, onOpenLibrary }: { onClose: () => vo
           <h3>Preset</h3>
           <div className="vg-presets">
             {presets.map((preset) => <label key={preset.id} className="vg-preset">
-              <input type="checkbox" checked={selected.includes(preset.id)} onChange={() => setSelected(togglePreset(selected, preset.id))} />
+              <input type="checkbox" checked={selected.includes(preset.id)} onChange={() => { const next = togglePreset(selected, preset.id); setSelected(next); void updateSettings({ generatorPresetIds: next }); }} />
               <span><strong>{preset.folderName}</strong><small>{preset.summary}</small>
                 {preset.unappliedProperties.length > 0 && <em className="vg-warn">Non applicato: {preset.unappliedProperties.join(", ")}</em>}
               </span>

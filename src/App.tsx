@@ -4,6 +4,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { Camera, ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Save, Star, Trophy, X } from "lucide-react";
 import { createProject, mergeProject, panelGrid } from "./project";
 import { InfoSidebar } from "./InfoSidebar";
+import { DEFAULT_SETTINGS, loadSettings, updateSettings } from "./settings";
 import { VariantGenerator } from "./VariantGenerator";
 import { CameraChip } from "./CameraDiagnostics";
 import type { ExportItem, ExportReport, IndexedShot, LibraryIndex, PreviewResult, Project, ShotDecision, Variant } from "./types";
@@ -136,8 +137,11 @@ export default function App() {
   const [projectPath, setProjectPath] = useState<string>();
   const [shotIndex, setShotIndex] = useState(0);
   const [viewport, setViewport] = useState<Viewport>(FIT);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [presetBarOpen, setPresetBarOpen] = useState(false);
+  /** Automatic project file for the open folder (app data), always kept up to date. */
+  const [sessionPath, setSessionPath] = useState<string>();
+  const [sidebarOpen, setSidebarOpen] = useState(DEFAULT_SETTINGS.shotSidebarOpen);
+  const [presetBarOpen, setPresetBarOpen] = useState(DEFAULT_SETTINGS.infoSidebarOpen);
+  const [settingsReady, setSettingsReady] = useState(false);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -184,17 +188,27 @@ export default function App() {
     return () => window.removeEventListener("keydown", listener);
   }, [go, panelPresets, shot, updateDecision]);
 
+  // Everything in the project (panels, hidden presets, winners, ratings, last shot) is
+  // saved automatically: always to the folder's session file, and also to the
+  // user's own .fujiview file when one was opened or saved.
   useEffect(() => {
-    if (!project || !projectPath) return;
-    const timer = window.setTimeout(() => invoke("save_project", { path: projectPath, project }).catch((error) => setNotice(`Salvataggio non riuscito: ${error}`)), 450);
+    if (!project) return;
+    const targets = [sessionPath, projectPath].filter((path): path is string => !!path);
+    if (!targets.length) return;
+    const timer = window.setTimeout(() => {
+      for (const path of new Set(targets)) invoke("save_project", { path, project }).catch((error) => setNotice(`Salvataggio non riuscito: ${error}`));
+    }, 450);
     return () => window.clearTimeout(timer);
-  }, [project, projectPath]);
+  }, [project, projectPath, sessionPath]);
 
+  // Remember the current shot so reopening resumes where the user left off.
   useEffect(() => {
-    if (!index || !project?.lastShotKey) return;
-    const found = index.shots.findIndex((candidate) => candidate.key === project.lastShotKey);
-    if (found >= 0) setShotIndex(found);
-  }, [index?.root]);
+    const key = shot?.key;
+    if (!key) return;
+    setProject((current) => current && current.lastShotKey !== key ? { ...current, lastShotKey: key } : current);
+  }, [shot?.key]);
+
+  useEffect(() => { if (settingsReady) void updateSettings({ shotSidebarOpen: sidebarOpen, infoSidebarOpen: presetBarOpen }); }, [settingsReady, sidebarOpen, presetBarOpen]);
 
   useEffect(() => {
     if (!index || !project) return;
@@ -213,16 +227,44 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [index, project?.panelPresets, shotIndex]);
 
-  const scan = async (root: string, existing?: Project, path?: string) => {
+  /** Indexes a folder and restores its saved state (from `existing`, else the folder's session file). */
+  const scan = async (root: string, existing?: Project, path?: string): Promise<boolean> => {
     setBusy("Indicizzazione in corso…"); setNotice(undefined);
     try {
       const result = await invoke<LibraryIndex>("scan_library", { root });
-      const next = existing ? mergeProject(existing, result) : createProject(result);
-      setIndex(result); setProject(next); setProjectPath(path); setShotIndex(0); setViewport(FIT);
+      const session = await invoke<string>("session_project_path", { root: result.root });
+      const saved = existing ?? await invoke<Project | null>("load_project_optional", { path: session }).catch(() => null) ?? undefined;
+      const next = saved ? mergeProject(saved, result) : createProject(result);
+      const resumed = next.lastShotKey ? result.shots.findIndex((candidate) => candidate.key === next.lastShotKey) : -1;
+      setIndex(result); setProject(next); setProjectPath(path); setSessionPath(session); setShotIndex(Math.max(0, resumed)); setViewport(FIT);
+      void updateSettings({ lastRoot: result.root, lastProjectPath: path ?? null });
       if (result.warnings.length) setNotice(`${result.warnings.length} file ignorati durante la scansione.`);
-    } catch (error) { setNotice(String(error)); }
+      return true;
+    } catch (error) { setNotice(String(error)); return false; }
     finally { setBusy(undefined); }
   };
+
+  // Startup: restore the panel layout and reopen the last folder or project.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void loadSettings().then(async (settings) => {
+      setSidebarOpen(settings.shotSidebarOpen);
+      setPresetBarOpen(settings.infoSidebarOpen);
+      setSettingsReady(true);
+      if (settings.lastProjectPath) {
+        try {
+          const loaded = await invoke<Project>("load_project", { path: settings.lastProjectPath });
+          if (await scan(loaded.sourceRoot, loaded, settings.lastProjectPath)) return;
+        } catch { /* fall back to the folder */ }
+      }
+      if (settings.lastRoot && !(await scan(settings.lastRoot))) {
+        setNotice(`Impossibile riaprire l'ultima cartella (${settings.lastRoot}).`);
+        void updateSettings({ lastRoot: null, lastProjectPath: null });
+      }
+    });
+  }, []);
 
   const openFolder = async () => {
     const root = await open({ directory: true, multiple: false, title: "Scegli la cartella contenente i preset" });
@@ -300,7 +342,7 @@ export default function App() {
         </button>
         <button onClick={openFolder} title="Apri cartella"><FolderOpen /></button>
         <button onClick={() => setGeneratorOpen(true)} title="Genera varianti dalla camera"><Camera /><CameraChip /></button>
-        <button onClick={saveProject} title="Salva progetto"><Save /></button>
+        <button onClick={saveProject} title={projectPath ? "Salva progetto (il salvataggio è comunque automatico)" : "Salva il progetto anche in un file .fujiview (il salvataggio è comunque automatico)"}><Save /></button>
         <button onClick={() => setViewport(FIT)} title="Adatta"><Maximize2 /></button>
         <button className="export" onClick={exportWinners}><Download /> Esporta</button>
       </div>

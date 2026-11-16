@@ -1,5 +1,6 @@
 pub mod camera;
 pub mod metadata;
+pub mod persist;
 pub mod variants;
 
 use fast_image_resize as fir;
@@ -527,38 +528,18 @@ fn save_project(path: String, project: serde_json::Value) -> Result<(), String> 
     {
         return Err("Versione progetto non supportata".into());
     }
-    let target = PathBuf::from(path);
-    let parent = target.parent().ok_or("Percorso progetto non valido")?;
-    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let temp = target.with_extension("fujiview.tmp");
-    let bytes = serde_json::to_vec_pretty(&project).map_err(|e| e.to_string())?;
-    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
-    if !target.exists() {
-        return fs::rename(temp, target).map_err(|e| e.to_string());
-    }
-    let backup = target.with_extension("fujiview.bak");
-    if backup.exists() {
-        fs::remove_file(&backup).map_err(|e| e.to_string())?;
-    }
-    fs::rename(&target, &backup).map_err(|e| e.to_string())?;
-    match fs::rename(&temp, &target) {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            let _ = fs::rename(&backup, &target);
-            Err(error.to_string())
-        }
-    }
+    persist::write_json_atomic(Path::new(&path), &project)
 }
 
 #[tauri::command]
 fn load_project(path: String) -> Result<serde_json::Value, String> {
-    let bytes = fs::read(path).map_err(|e| e.to_string())?;
-    let value: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|e| format!("Progetto non valido: {e}"))?;
-    if value.get("schemaVersion").and_then(|item| item.as_u64()) != Some(1) {
-        return Err("Versione progetto non supportata".into());
-    }
-    Ok(value)
+    persist::load_project_file(Path::new(&path))?.ok_or_else(|| "Progetto non trovato".into())
+}
+
+/// Like `load_project`, but a missing file is `None` instead of an error.
+#[tauri::command]
+fn load_project_optional(path: String) -> Result<Option<serde_json::Value>, String> {
+    persist::load_project_file(Path::new(&path))
 }
 
 fn embed_rating(path: &Path, rating: i32) -> Result<(), String> {
@@ -831,6 +812,10 @@ pub fn run() {
             get_preview,
             save_project,
             load_project,
+            load_project_optional,
+            persist::load_settings,
+            persist::save_settings,
+            persist::session_project_path,
             export_winners,
             metadata::image_metadata,
             variants::service::camera_status,

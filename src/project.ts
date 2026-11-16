@@ -37,14 +37,13 @@ export function mergeProject(project: Project, index: LibraryIndex): Project {
   let hidden = (project.hiddenPresets ?? []).filter((preset) => index.presets.includes(preset));
   if (hidden.length >= index.presets.length) hidden = hidden.filter((preset) => preset !== index.guidePreset);
   const visible = (preset: string) => !hidden.includes(preset);
+  // The saved panel order is kept; presets new to the folder follow, guide first.
   const retainedPanels = project.panelPresets.filter((preset, position) =>
-    index.presets.includes(preset) && project.panelPresets.indexOf(preset) === position && preset !== index.guidePreset && visible(preset)
+    index.presets.includes(preset) && project.panelPresets.indexOf(preset) === position && visible(preset)
   );
-  const panelPresets = [
-    ...(visible(index.guidePreset) ? [index.guidePreset] : []),
-    ...retainedPanels,
-    ...index.presets.filter((preset) => preset !== index.guidePreset && !retainedPanels.includes(preset) && visible(preset))
-  ].slice(0, MAX_PANELS);
+  const added = [index.guidePreset, ...index.presets.filter((preset) => preset !== index.guidePreset)]
+    .filter((preset) => !retainedPanels.includes(preset) && visible(preset));
+  const panelPresets = [...retainedPanels, ...added].slice(0, MAX_PANELS);
   return {
     ...project,
     sourceRoot: index.root,

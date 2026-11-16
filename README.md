@@ -76,7 +76,7 @@ For development, set `FUJIVIEW_FAKE_CAMERA=1` to enable a simulated camera.
 ## Controls
 
 - The comparison shows one panel per preset (up to 9) and adapts the grid to their number.
-- The right-hand sidebar (toolbar button) has collapsible sections:
+- Both sidebars are open by default and can be toggled from the toolbar; their state is remembered. The right-hand sidebar has collapsible sections:
   - **Preset**: show or hide each preset (saved in the project), with each variant's film simulation, DR and white balance read from its Fujifilm MakerNote (hover for the full recipe).
   - **Scatto / Fotocamera / Luogo / File**: date and time, shutter speed, aperture, ISO, exposure compensation, focal length, exposure program, metering, flash, shutter type, camera, lens, firmware, GPS coordinates when present, pixel size and file size.
 - Click a comparison panel or press `1`–`9` to select its preset as the winner.
@@ -91,7 +91,14 @@ The selected winner has a yellow border and a visible winner badge. Selecting a 
 
 ## Projects and export
 
-FujiView project files use the `.fujiview` extension and store panel choices, winners, ratings, and the last viewed shot. Original images are never modified.
+FujiView project files use the `.fujiview` extension and store panel choices and order, hidden presets, winners, ratings, and the last viewed shot. Original images are never modified.
+
+Everything is saved automatically, with no need to press Save:
+
+- Each opened folder has its own project file in `%APPDATA%\com.fujiview.desktop\projects\` (never inside the photo folders). Reopening the same folder restores its winners, ratings, filters, and last shot.
+- App preferences (sidebar visibility, the last opened folder or project, the presets ticked in the variant generator) live in `settings.json` in the same folder. At startup FujiView reopens the last folder where you left off.
+- The Save button additionally writes the project to a `.fujiview` file of your choice, which is then kept up to date too.
+- Every write is atomic and keeps a `.bak` copy of the previous version, used automatically if the main file is damaged.
 
 Export copies only the selected winners to the destination folder. The chosen rating is embedded as `xmp:Rating` without re-encoding the original image pixels.
 
