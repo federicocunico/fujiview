@@ -17,6 +17,8 @@ export type Project = {
   presets: string[];
   guidePreset: string;
   panelPresets: string[];
+  /** Presets the user hid from the comparison (absent in older project files). */
+  hiddenPresets?: string[];
   decisions: Record<string, ShotDecision>;
   lastShotKey: string | null;
   createdAt: string;

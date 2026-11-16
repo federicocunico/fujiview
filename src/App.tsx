@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { Camera, ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, PanelLeftClose, PanelLeftOpen, Save, Star, Trophy, X } from "lucide-react";
-import { createProject, mergeProject, panelGrid } from "./project";
+import { Camera, ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Save, Star, Trophy, X } from "lucide-react";
+import { createProject, MAX_PANELS, mergeProject, panelGrid, showAllPresets, togglePresetVisibility } from "./project";
 import { VariantGenerator } from "./VariantGenerator";
 import { CameraChip } from "./CameraDiagnostics";
 import type { ExportItem, ExportReport, IndexedShot, LibraryIndex, PreviewResult, Project, ShotDecision, Variant } from "./types";
@@ -136,6 +136,7 @@ export default function App() {
   const [shotIndex, setShotIndex] = useState(0);
   const [viewport, setViewport] = useState<Viewport>(FIT);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [presetBarOpen, setPresetBarOpen] = useState(false);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -293,6 +294,9 @@ export default function App() {
         <button onClick={() => setSidebarOpen((open) => !open)} title={sidebarOpen ? "Nascondi elenco scatti" : "Mostra elenco scatti"}>
           {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
         </button>
+        <button onClick={() => setPresetBarOpen((open) => !open)} title={presetBarOpen ? "Nascondi elenco preset" : "Mostra/nascondi preset"}>
+          {presetBarOpen ? <PanelRightClose /> : <PanelRightOpen />}
+        </button>
         <button onClick={openFolder} title="Apri cartella"><FolderOpen /></button>
         <button onClick={() => setGeneratorOpen(true)} title="Genera varianti dalla camera"><Camera /><CameraChip /></button>
         <button onClick={saveProject} title="Salva progetto"><Save /></button>
@@ -300,7 +304,7 @@ export default function App() {
         <button className="export" onClick={exportWinners}><Download /> Esporta</button>
       </div>
     </header>
-    <div className={`viewer-body ${sidebarOpen ? "" : "sidebar-hidden"}`}>
+    <div className="viewer-body" style={{ gridTemplateColumns: `${sidebarOpen ? "216px " : ""}minmax(0, 1fr)${presetBarOpen ? " 220px" : ""}` }}>
       {sidebarOpen && <aside className="shot-sidebar">
         <div className="sidebar-heading">
           <strong>Scatti</strong>
@@ -319,12 +323,37 @@ export default function App() {
       </aside>}
       <div className="comparison" style={{ gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}>
         {panelPresets.map((preset, panel) => <div className="panel-wrap" key={`${panel}-${preset}`}>
-          <select value={preset} onChange={(event) => setProject({ ...project, panelPresets: project.panelPresets.map((value, i) => i === panel ? event.target.value : value) })}>
+          <select value={preset} onChange={(event) => {
+            const next = event.target.value;
+            const panelPresets = project.panelPresets.map((value, i) => i === panel ? next : value);
+            const hiddenPresets = [...(project.hiddenPresets ?? []).filter((item) => item !== next), ...(panelPresets.includes(preset) ? [] : [preset])];
+            setProject({ ...project, panelPresets, hiddenPresets });
+          }}>
             {project.presets.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
           <Preview variant={variants[panel]} viewport={viewport} onViewport={setViewport} panel={panel + 1} winner={decision?.winnerPreset === preset} onWinner={() => updateDecision({ winnerPreset: preset, reviewed: true })}/>
         </div>)}
       </div>
+      {presetBarOpen && <aside className="preset-sidebar" aria-label="Preset visibili">
+        <div className="sidebar-heading">
+          <strong>Preset</strong>
+          <small>{panelPresets.length} di {project.presets.length} visibili</small>
+        </div>
+        <div className="preset-list">
+          {project.presets.map((preset) => {
+            const position = panelPresets.indexOf(preset);
+            const shown = position >= 0;
+            const locked = shown ? panelPresets.length <= 1 : panelPresets.length >= MAX_PANELS;
+            const missing = !!shot && !shot.variants.some((variant) => variant.preset === preset);
+            return <label key={preset} className={`preset-toggle ${shown ? "shown" : ""}`} title={locked ? (shown ? "Deve restare almeno un preset visibile" : `Al massimo ${MAX_PANELS} preset visibili`) : undefined}>
+              <input type="checkbox" checked={shown} disabled={locked} onChange={() => setProject(togglePresetVisibility(project, preset))} />
+              <span className="preset-name">{preset}{preset === project.guidePreset && <small> · guida</small>}{missing && <small> · manca in questo scatto</small>}</span>
+              {shown && <kbd>{position + 1}</kbd>}
+            </label>;
+          })}
+        </div>
+        {panelPresets.length < Math.min(project.presets.length, MAX_PANELS) && <button className="secondary preset-all" onClick={() => setProject(showAllPresets(project))}>Mostra tutti</button>}
+      </aside>}
     </div>
     <footer>
       <button aria-label="Scatto precedente" title="Scatto precedente (freccia sinistra)" disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>
