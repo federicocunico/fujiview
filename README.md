@@ -76,7 +76,9 @@ For development, set `FUJIVIEW_FAKE_CAMERA=1` to enable a simulated camera.
 ## Controls
 
 - The comparison shows one panel per preset (up to 9) and adapts the grid to their number.
-- The right-hand "Preset" sidebar (toolbar button) shows or hides each preset; the choice is saved in the project.
+- The right-hand sidebar (toolbar button) has collapsible sections:
+  - **Preset**: show or hide each preset (saved in the project), with each variant's film simulation, DR and white balance read from its Fujifilm MakerNote (hover for the full recipe).
+  - **Scatto / Fotocamera / Luogo / File**: date and time, shutter speed, aperture, ISO, exposure compensation, focal length, exposure program, metering, flash, shutter type, camera, lens, firmware, GPS coordinates when present, pixel size and file size.
 - Click a comparison panel or press `1`–`9` to select its preset as the winner.
 - Press `Enter` or `Right Arrow` to move to the next shot.
 - Press `Left Arrow` to return to the previous shot.

@@ -1,4 +1,5 @@
 pub mod camera;
+pub mod metadata;
 pub mod variants;
 
 use fast_image_resize as fir;
@@ -831,6 +832,7 @@ pub fn run() {
             save_project,
             load_project,
             export_winners,
+            metadata::image_metadata,
             variants::service::camera_status,
             variants::service::camera_status_cached,
             variants::service::camera_diagnostics,

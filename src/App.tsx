@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Camera, ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Save, Star, Trophy, X } from "lucide-react";
-import { createProject, MAX_PANELS, mergeProject, panelGrid, showAllPresets, togglePresetVisibility } from "./project";
+import { createProject, mergeProject, panelGrid } from "./project";
+import { InfoSidebar } from "./InfoSidebar";
 import { VariantGenerator } from "./VariantGenerator";
 import { CameraChip } from "./CameraDiagnostics";
 import type { ExportItem, ExportReport, IndexedShot, LibraryIndex, PreviewResult, Project, ShotDecision, Variant } from "./types";
@@ -294,7 +295,7 @@ export default function App() {
         <button onClick={() => setSidebarOpen((open) => !open)} title={sidebarOpen ? "Nascondi elenco scatti" : "Mostra elenco scatti"}>
           {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
         </button>
-        <button onClick={() => setPresetBarOpen((open) => !open)} title={presetBarOpen ? "Nascondi elenco preset" : "Mostra/nascondi preset"}>
+        <button onClick={() => setPresetBarOpen((open) => !open)} title={presetBarOpen ? "Nascondi pannello preset e info" : "Preset e info scatto"}>
           {presetBarOpen ? <PanelRightClose /> : <PanelRightOpen />}
         </button>
         <button onClick={openFolder} title="Apri cartella"><FolderOpen /></button>
@@ -304,7 +305,7 @@ export default function App() {
         <button className="export" onClick={exportWinners}><Download /> Esporta</button>
       </div>
     </header>
-    <div className="viewer-body" style={{ gridTemplateColumns: `${sidebarOpen ? "216px " : ""}minmax(0, 1fr)${presetBarOpen ? " 220px" : ""}` }}>
+    <div className="viewer-body" style={{ gridTemplateColumns: `${sidebarOpen ? "216px " : ""}minmax(0, 1fr)${presetBarOpen ? " 270px" : ""}` }}>
       {sidebarOpen && <aside className="shot-sidebar">
         <div className="sidebar-heading">
           <strong>Scatti</strong>
@@ -334,26 +335,7 @@ export default function App() {
           <Preview variant={variants[panel]} viewport={viewport} onViewport={setViewport} panel={panel + 1} winner={decision?.winnerPreset === preset} onWinner={() => updateDecision({ winnerPreset: preset, reviewed: true })}/>
         </div>)}
       </div>
-      {presetBarOpen && <aside className="preset-sidebar" aria-label="Preset visibili">
-        <div className="sidebar-heading">
-          <strong>Preset</strong>
-          <small>{panelPresets.length} di {project.presets.length} visibili</small>
-        </div>
-        <div className="preset-list">
-          {project.presets.map((preset) => {
-            const position = panelPresets.indexOf(preset);
-            const shown = position >= 0;
-            const locked = shown ? panelPresets.length <= 1 : panelPresets.length >= MAX_PANELS;
-            const missing = !!shot && !shot.variants.some((variant) => variant.preset === preset);
-            return <label key={preset} className={`preset-toggle ${shown ? "shown" : ""}`} title={locked ? (shown ? "Deve restare almeno un preset visibile" : `Al massimo ${MAX_PANELS} preset visibili`) : undefined}>
-              <input type="checkbox" checked={shown} disabled={locked} onChange={() => setProject(togglePresetVisibility(project, preset))} />
-              <span className="preset-name">{preset}{preset === project.guidePreset && <small> · guida</small>}{missing && <small> · manca in questo scatto</small>}</span>
-              {shown && <kbd>{position + 1}</kbd>}
-            </label>;
-          })}
-        </div>
-        {panelPresets.length < Math.min(project.presets.length, MAX_PANELS) && <button className="secondary preset-all" onClick={() => setProject(showAllPresets(project))}>Mostra tutti</button>}
-      </aside>}
+      {presetBarOpen && <InfoSidebar project={project} shot={shot} onProject={setProject} />}
     </div>
     <footer>
       <button aria-label="Scatto precedente" title="Scatto precedente (freccia sinistra)" disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>

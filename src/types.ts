@@ -6,7 +6,14 @@ export type Variant = {
   bytes: number;
 };
 
-export type IndexedShot = { key: string; displayName: string; variants: Variant[] };
+export type MetaRow = { label: string; value: string };
+export type ImageMetadata = {
+  sections: { title: string; rows: MetaRow[] }[];
+  gps: { latitude: number; longitude: number; altitude: number | null } | null;
+  recipe: { summary: string; rows: MetaRow[] } | null;
+};
+
+export type IndexedShot ={ key: string; displayName: string; variants: Variant[] };
 export type LibraryIndex = { root: string; presets: string[]; guidePreset: string; shots: IndexedShot[]; warnings: string[] };
 export type ShotDecision = { key: string; rating: number; winnerPreset: string | null; reviewed: boolean };
 
