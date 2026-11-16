@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Camera, ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, PanelLeftClose, PanelLeftOpen, Save, Star, Trophy, X } from "lucide-react";
-import { createProject, mergeProject } from "./project";
+import { createProject, mergeProject, panelGrid } from "./project";
 import { VariantGenerator } from "./VariantGenerator";
 import { CameraChip } from "./CameraDiagnostics";
 import type { ExportItem, ExportReport, IndexedShot, LibraryIndex, PreviewResult, Project, ShotDecision, Variant } from "./types";
@@ -144,6 +144,7 @@ export default function App() {
   const shot = index?.shots[shotIndex];
   const decision = shot && project?.decisions[shot.key];
   const panelPresets = project?.panelPresets ?? [];
+  const grid = panelGrid(panelPresets.length);
 
   const updateDecision = useCallback((patch: Partial<{ rating: number; winnerPreset: string | null; reviewed: boolean }>) => {
     if (!shot || !project) return;
@@ -172,7 +173,7 @@ export default function App() {
       if (event.key === "ArrowLeft") go(-1);
       if (event.key === "ArrowRight") go(1);
       if (event.altKey && /^[0-5]$/.test(event.key)) { event.preventDefault(); updateDecision({ rating: Number(event.key), reviewed: true }); }
-      else if (/^[1-4]$/.test(event.key)) {
+      else if (/^[1-9]$/.test(event.key)) {
         const preset = panelPresets[Number(event.key) - 1];
         if (preset && shot?.variants.some((variant) => variant.preset === preset)) updateDecision({ winnerPreset: preset, reviewed: true });
       }
@@ -316,7 +317,7 @@ export default function App() {
           />)}
         </nav>
       </aside>}
-      <div className={`comparison panels-${Math.max(1, panelPresets.length)}`}>
+      <div className="comparison" style={{ gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}>
         {panelPresets.map((preset, panel) => <div className="panel-wrap" key={`${panel}-${preset}`}>
           <select value={preset} onChange={(event) => setProject({ ...project, panelPresets: project.panelPresets.map((value, i) => i === panel ? event.target.value : value) })}>
             {project.presets.map((option) => <option key={option} value={option}>{option}</option>)}

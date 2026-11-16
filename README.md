@@ -75,7 +75,8 @@ For development, set `FUJIVIEW_FAKE_CAMERA=1` to enable a simulated camera.
 
 ## Controls
 
-- Click a comparison panel or press `1`–`4` to select its preset as the winner.
+- The comparison shows one panel per preset (up to 9) and adapts the grid to their number.
+- Click a comparison panel or press `1`–`9` to select its preset as the winner.
 - Press `Enter` or `Right Arrow` to move to the next shot.
 - Press `Left Arrow` to return to the previous shot.
 - Press `Alt+0`–`Alt+5` to set the rating.
