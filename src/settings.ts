@@ -12,6 +12,9 @@ export type Settings = {
   /** Last export destination and minimum rating chosen in the export dialog. */
   exportDir: string | null;
   exportMinRating: number;
+  /** Rename exported files to <prefix>_0001… in capture order. */
+  exportRename: boolean;
+  exportPrefix: string;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -22,6 +25,8 @@ export const DEFAULT_SETTINGS: Settings = {
   generatorPresetIds: null,
   exportDir: null,
   exportMinRating: 0,
+  exportRename: false,
+  exportPrefix: "",
 };
 
 /** Fills missing or wrongly typed fields from the defaults (older or hand-edited files). */
@@ -37,6 +42,8 @@ export function normalizeSettings(raw: unknown): Settings {
     lastProjectPath: text("lastProjectPath"),
     generatorPresetIds: ids,
     exportDir: text("exportDir"),
+    exportRename: bool("exportRename"),
+    exportPrefix: typeof value.exportPrefix === "string" ? value.exportPrefix : "",
     exportMinRating: typeof value.exportMinRating === "number" && Number.isInteger(value.exportMinRating) && value.exportMinRating >= 0 && value.exportMinRating <= 5 ? value.exportMinRating : 0,
   };
 }

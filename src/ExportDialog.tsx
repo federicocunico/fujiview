@@ -6,12 +6,21 @@ import { buildExportItems, countAtLeast, countByRating } from "./export";
 import { loadSettings, updateSettings } from "./settings";
 import type { ExportReport, LibraryIndex, Project } from "./types";
 
+/** First file name the rename would produce, for the preview (digits grow past 9999 files). */
+function exampleName(prefix: string, count: number): string {
+  const clean = prefix.replace(/[<>:"/\|?*]/g, "").trim();
+  const number = "1".padStart(Math.max(4, String(count).length), "0");
+  return `${clean ? `${clean}_` : ""}${number}.jpg`;
+}
+
 const RATING_LABELS = ["Tutti i vincitori", "★ 1 o più", "★ 2 o più", "★ 3 o più", "★ 4 o più", "★ 5"];
 
 export function ExportDialog({ index, project, onClose }: { index: LibraryIndex; project: Project; onClose: () => void }) {
   const [destination, setDestination] = useState<string | null>(null);
   const [minRating, setMinRating] = useState(0);
   const [overwrite, setOverwrite] = useState(false);
+  const [rename, setRename] = useState(false);
+  const [prefix, setPrefix] = useState("");
   const [exporting, setExporting] = useState(false);
   const [report, setReport] = useState<ExportReport>();
   const [error, setError] = useState<string>();
@@ -25,6 +34,8 @@ export function ExportDialog({ index, project, onClose }: { index: LibraryIndex;
       if (!alive) return;
       setDestination(settings.exportDir);
       setMinRating(settings.exportMinRating);
+      setRename(settings.exportRename);
+      setPrefix(settings.exportPrefix);
     });
     return () => { alive = false; };
   }, []);
@@ -54,7 +65,7 @@ export function ExportDialog({ index, project, onClose }: { index: LibraryIndex;
     setExporting(true);
     setError(undefined);
     try {
-      setReport(await invoke<ExportReport>("export_winners", { destination, items, overwrite }));
+      setReport(await invoke<ExportReport>("export_winners", { destination, items, overwrite, rename: rename ? { prefix } : null }));
     } catch (reason) { setError(`Export non riuscito: ${reason}`); }
     finally { setExporting(false); }
   };
@@ -80,11 +91,17 @@ export function ExportDialog({ index, project, onClose }: { index: LibraryIndex;
               <span>{label}<small>{countAtLeast(counts, value)} scatti</small></span>
             </label>)}
           </div>
+          <label className="vg-check"><input type="checkbox" checked={rename} disabled={exporting} onChange={(event) => { setRename(event.target.checked); void updateSettings({ exportRename: event.target.checked }); }} /> Rinomina in sequenza (ordine di scatto)</label>
+          {rename && <div className="vg-row">
+            <input type="text" value={prefix} disabled={exporting} placeholder="Prefisso (facoltativo)" onChange={(event) => { setPrefix(event.target.value); void updateSettings({ exportPrefix: event.target.value }); }} />
+            <small className="vg-path">Es. {exampleName(prefix, items.length)}</small>
+          </div>}
           <label className="vg-check"><input type="checkbox" checked={overwrite} disabled={exporting} onChange={(event) => setOverwrite(event.target.checked)} /> Sovrascrivi i file con lo stesso nome nella destinazione</label>
         </section>
 
         <section className="vg-summary">
           <div><b>{items.length}</b> scatti da esportare su {countAtLeast(counts, 0)} vincitori</div>
+          <small>I file vengono copiati identici byte per byte (nessuna ricodifica, metadati e rating XMP originali intatti).</small>
           {!overwrite && <small>I file già presenti nella destinazione vengono saltati.</small>}
         </section>
 

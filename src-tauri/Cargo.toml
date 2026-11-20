@@ -25,7 +25,6 @@ kamadak-exif = "0.6"
 blake3 = "1.8"
 natord = "1.0"
 rusqlite = { version = "0.37", features = ["bundled"] }
-xmp_toolkit = { version = "1.12", features = ["crt_static"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [

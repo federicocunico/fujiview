@@ -99,7 +99,7 @@ Everything is saved automatically, with no need to press Save:
 - The Save button additionally writes the project to a `.fujiview` file of your choice, which is then kept up to date too.
 - Every write is atomic and keeps a `.bak` copy of the previous version, used automatically if the main file is damaged.
 
-Export copies only the selected winners to the destination folder. The chosen rating is embedded as `xmp:Rating` without re-encoding the original image pixels.
+Export copies only the selected winners to the destination folder, filtered by minimum rating. Files are copied byte for byte (no re-encoding, original metadata untouched). Optionally they are renamed `<prefix>_0001.ext`, `<prefix>_0002.ext`… in capture-time order (EXIF DateTimeOriginal).
 
 ## Performance
 

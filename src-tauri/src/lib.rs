@@ -21,7 +21,6 @@ use std::{
 use tauri::{Manager, State};
 use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use turbojpeg::{Decompressor, Image as TurboImage, PixelFormat, ScalingFactor, Subsamp};
-use xmp_toolkit::{xmp_ns, OpenFileOptions, XmpFile, XmpMeta, XmpValue};
 
 const CACHE_LIMIT_BYTES: i64 = 20 * 1024 * 1024 * 1024;
 const CACHE_VERSION: &str = "preview-v2-turbojpeg";
@@ -77,7 +76,13 @@ struct PreviewResult {
 struct ExportItem {
     source_path: String,
     output_name: String,
-    rating: i32,
+}
+
+/// Renames exported files to `<prefix>_0001.ext`, `<prefix>_0002.ext`… in capture-time order.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RenameOptions {
+    prefix: String,
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -542,21 +547,60 @@ fn load_project_optional(path: String) -> Result<Option<serde_json::Value>, Stri
     persist::load_project_file(Path::new(&path))
 }
 
-fn embed_rating(path: &Path, rating: i32) -> Result<(), String> {
-    let mut file = XmpFile::new().map_err(|e| e.to_string())?;
-    file.open_file(
-        path,
-        OpenFileOptions::default().for_update().use_smart_handler(),
-    )
-    .map_err(|e| e.to_string())?;
-    let mut meta = match file.xmp() {
-        Some(value) => value,
-        None => XmpMeta::new().map_err(|e| e.to_string())?,
+/// Capture time as a sortable `YYYY:MM:DD HH:MM:SS.sub` string (EXIF DateTimeOriginal).
+fn capture_key(path: &Path) -> Option<String> {
+    let file = fs::File::open(path).ok()?;
+    let mut reader = BufReader::new(file);
+    let data = exif::Reader::new().read_from_container(&mut reader).ok()?;
+    let text = |tag| {
+        data.get_field(tag, exif::In::PRIMARY).and_then(|field| match &field.value {
+            exif::Value::Ascii(parts) => parts
+                .first()
+                .map(|part| String::from_utf8_lossy(part).trim().to_string())
+                .filter(|value| !value.is_empty()),
+            _ => None,
+        })
     };
-    meta.set_property_i32(xmp_ns::XMP, "Rating", &XmpValue::new(rating.clamp(0, 5)))
-        .map_err(|e| e.to_string())?;
-    file.put_xmp(&meta).map_err(|e| e.to_string())?;
-    file.try_close().map_err(|e| e.to_string())
+    let base = text(exif::Tag::DateTimeOriginal).or_else(|| text(exif::Tag::DateTime))?;
+    let sub = text(exif::Tag::SubSecTimeOriginal).unwrap_or_default();
+    Some(format!("{base}.{sub:0<3}"))
+}
+
+fn sanitize_prefix(prefix: &str) -> String {
+    prefix
+        .chars()
+        .filter(|c| !matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') && !c.is_control())
+        .collect::<String>()
+        .trim_matches(|c: char| c == '.' || c.is_whitespace())
+        .to_string()
+}
+
+/// New file names (same order as `entries`) numbered by capture time, then original name.
+/// Entries without a capture time go last, ordered by name. The extension is kept as is.
+fn sequence_names(entries: &[(Option<String>, String)], prefix: &str) -> Vec<String> {
+    let prefix = sanitize_prefix(prefix);
+    let width = entries.len().to_string().len().max(4);
+    let mut order: Vec<usize> = (0..entries.len()).collect();
+    order.sort_by(|&x, &y| {
+        let (cx, nx) = (&entries[x].0, &entries[x].1);
+        let (cy, ny) = (&entries[y].0, &entries[y].1);
+        match (cx, cy) {
+            (Some(a), Some(b)) => a.cmp(b).then_with(|| natord::compare(nx, ny)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => natord::compare(nx, ny),
+        }
+    });
+    let mut names = vec![String::new(); entries.len()];
+    for (position, &entry) in order.iter().enumerate() {
+        let number = format!("{:0width$}", position + 1);
+        let stem = if prefix.is_empty() { number } else { format!("{prefix}_{number}") };
+        names[entry] = match Path::new(&entries[entry].1).extension().and_then(|e| e.to_str()) {
+            Some(ext) => format!("{stem}.{ext}"),
+            None => stem,
+        };
+    }
+    names
 }
 
 #[tauri::command]
@@ -564,12 +608,24 @@ async fn export_winners(
     destination: String,
     items: Vec<ExportItem>,
     overwrite: bool,
+    rename: Option<RenameOptions>,
 ) -> Result<ExportReport, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let destination = PathBuf::from(destination);
         fs::create_dir_all(&destination).map_err(|e| e.to_string())?;
         let canonical_destination = destination.canonicalize().map_err(|e| e.to_string())?;
         let mut report = ExportReport::default();
+        let mut items = items;
+        if let Some(options) = &rename {
+            let entries: Vec<(Option<String>, String)> = items
+                .iter()
+                .map(|item| (capture_key(Path::new(&item.source_path)), item.output_name.clone()))
+                .collect();
+            let names = sequence_names(&entries, &options.prefix);
+            for (item, name) in items.iter_mut().zip(names) {
+                item.output_name = name;
+            }
+        }
         for item in items {
             let source = PathBuf::from(&item.source_path);
             if !source.is_file() || image_extension(&source).is_none() {
@@ -603,13 +659,6 @@ async fn export_winners(
                 report
                     .errors
                     .push(format!("{}: {}", item.output_name, error));
-                continue;
-            }
-            if let Err(error) = embed_rating(&temporary, item.rating) {
-                let _ = fs::remove_file(&temporary);
-                report
-                    .errors
-                    .push(format!("{} (XMP): {}", item.output_name, error));
                 continue;
             }
             let backup = canonical_destination.join(format!(".{stem}.fujiview-old.{extension}"));
@@ -727,19 +776,38 @@ mod tests {
         assert_eq!(image::image_dimensions(target).unwrap(), (40, 20));
     }
     #[test]
-    fn xmp_rating_keeps_image_pixels_readable() {
+    fn sequence_names_follow_capture_time_then_name() {
+        let entries = vec![
+            (Some("2026:11:12 10:00:02.000".to_string()), "DSCF0001.jpg".to_string()),
+            (None, "DSCF0003.JPG".to_string()),
+            (Some("2026:11:12 10:00:01.500".to_string()), "DSCF0002.jpg".to_string()),
+            (Some("2026:11:12 10:00:02.000".to_string()), "DSCF0000.jpg".to_string()),
+        ];
+        assert_eq!(
+            sequence_names(&entries, "Matrimonio"),
+            ["Matrimonio_0003.jpg", "Matrimonio_0004.JPG", "Matrimonio_0001.jpg", "Matrimonio_0002.jpg"]
+        );
+        assert_eq!(sequence_names(&entries[..1], " a/b: "), ["ab_0001.jpg"]);
+        assert_eq!(sequence_names(&entries[..1], "")[0], "0001.jpg");
+    }
+
+    #[test]
+    fn export_copies_bytes_identically_and_renames() {
         let temp = tempfile::tempdir().unwrap();
-        let source = temp.path().join("rated.jpg");
-        let pixels = vec![90u8; 16 * 16 * 3];
-        JpegEncoder::new_with_quality(fs::File::create(&source).unwrap(), 95)
-            .write_image(&pixels, 16, 16, image::ExtendedColorType::Rgb8)
-            .unwrap();
-        let before = image::open(&source).unwrap().to_rgb8();
-        embed_rating(&source, 4).unwrap();
-        let after = image::open(&source).unwrap().to_rgb8();
-        assert_eq!(before.as_raw(), after.as_raw());
-        let meta = XmpMeta::from_file(&source).unwrap();
-        assert_eq!(meta.property_i32(xmp_ns::XMP, "Rating").unwrap().value, 4);
+        let source = temp.path().join("DSCF1.jpg");
+        let bytes: Vec<u8> = (0..=255u8).cycle().take(5000).collect();
+        fs::write(&source, &bytes).unwrap();
+        let out = temp.path().join("out");
+        let items = vec![ExportItem { source_path: source.to_string_lossy().into(), output_name: "DSCF1.jpg".into() }];
+        let report = tauri::async_runtime::block_on(export_winners(
+            out.to_string_lossy().into(),
+            items,
+            false,
+            Some(RenameOptions { prefix: "Test".into() }),
+        ))
+        .unwrap();
+        assert_eq!((report.exported, report.errors.len()), (1, 0));
+        assert_eq!(fs::read(out.join("Test_0001.jpg")).unwrap(), bytes);
     }
 
     #[test]
