@@ -5,9 +5,10 @@ import { Camera, ChevronLeft, ChevronRight, Download, FolderOpen, Maximize2, Pan
 import { createProject, mergeProject, panelGrid } from "./project";
 import { InfoSidebar } from "./InfoSidebar";
 import { DEFAULT_SETTINGS, loadSettings, updateSettings } from "./settings";
+import { ExportDialog } from "./ExportDialog";
 import { VariantGenerator } from "./VariantGenerator";
 import { CameraChip } from "./CameraDiagnostics";
-import type { ExportItem, ExportReport, IndexedShot, LibraryIndex, PreviewResult, Project, ShotDecision, Variant } from "./types";
+import type { IndexedShot, LibraryIndex, PreviewResult, Project, ShotDecision, Variant } from "./types";
 
 type Viewport = { scale: number; x: number; y: number };
 const FIT: Viewport = { scale: 1, x: 0, y: 0 };
@@ -145,6 +146,7 @@ export default function App() {
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const prefetchGeneration = useRef(0);
 
   const shot = index?.shots[shotIndex];
@@ -177,7 +179,7 @@ export default function App() {
     };
 
     const listener = (event: KeyboardEvent) => {
-      if ((event.target as HTMLElement)?.matches("input,select,textarea")) return;
+      if (exportOpen || (event.target as HTMLElement)?.matches("input,select,textarea")) return;
       if (event.code === "Space" && !event.altKey && !event.ctrlKey && !event.metaKey) {
         event.preventDefault();
         go(event.shiftKey ? -1 : 1);
@@ -212,7 +214,7 @@ export default function App() {
     };
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
-  }, [decision?.winnerPreset, go, panelPresets, shot, updateDecision]);
+  }, [decision?.winnerPreset, exportOpen, go, panelPresets, shot, updateDecision]);
 
   // Everything in the project (panels, hidden presets, winners, ratings, last shot) is
   // saved automatically: always to the folder's session file, and also to the
@@ -314,31 +316,12 @@ export default function App() {
     catch (error) { setNotice(`Salvataggio non riuscito: ${error}`); }
   };
 
-  const exportWinners = async () => {
-    if (!index || !project) return;
-    const destination = await open({ directory: true, multiple: false, title: "Cartella di esportazione" });
-    if (!destination) return;
-    const items: ExportItem[] = [];
-    for (const candidate of index.shots) {
-      const selected = project.decisions[candidate.key];
-      if (!selected?.winnerPreset) continue;
-      const variant = candidate.variants.find((item) => item.preset === selected.winnerPreset);
-      if (variant) items.push({ sourcePath: variant.path, outputName: variant.fileName, rating: selected.rating });
-    }
-    if (!items.length) { setNotice("Nessuno scatto ha ancora un vincitore."); return; }
-    const overwrite = window.confirm("Sostituire eventuali file con lo stesso nome nella destinazione?\nScegli Annulla per saltarli.");
-    setBusy(`Esportazione di ${items.length} vincitori…`);
-    try {
-      const report = await invoke<ExportReport>("export_winners", { destination, items, overwrite });
-      setNotice(`Export completato: ${report.exported} copiati, ${report.skipped} saltati${report.errors.length ? `, ${report.errors.length} errori` : ""}.`);
-    } catch (error) { setNotice(`Export non riuscito: ${error}`); }
-    finally { setBusy(undefined); }
-  };
-
   const variants = useMemo(() => panelPresets.map((preset) => shot?.variants.find((variant) => variant.preset === preset)), [panelPresets, shot]);
   const decided = project ? Object.values(project.decisions).filter((item) => item.winnerPreset).length : 0;
 
   const generator = generatorOpen && <VariantGenerator onClose={() => setGeneratorOpen(false)} onOpenLibrary={(dir) => { setGeneratorOpen(false); void scan(dir); }} />;
+
+  const exportDialog = exportOpen && index && project && <ExportDialog index={index} project={project} onClose={() => setExportOpen(false)} />;
 
   if (!index || !project) return <main className="welcome">
     <div className="brand"><span>F</span><div><h1>FujiView</h1><p>Confronta. Scegli. Esporta.</p></div></div>
@@ -351,6 +334,7 @@ export default function App() {
     </section>
     {busy && <div className="busy-overlay"><i />{busy}</div>}
     {generator}
+    {exportDialog}
   </main>;
 
   return <main className="workspace">
@@ -370,7 +354,7 @@ export default function App() {
         <button onClick={() => setGeneratorOpen(true)} title="Genera varianti dalla camera"><Camera /><CameraChip /></button>
         <button onClick={saveProject} title={projectPath ? "Salva progetto (il salvataggio è comunque automatico)" : "Salva il progetto anche in un file .fujiview (il salvataggio è comunque automatico)"}><Save /></button>
         <button onClick={() => setViewport(FIT)} title="Adatta"><Maximize2 /></button>
-        <button className="export" onClick={exportWinners}><Download /> Esporta</button>
+        <button className="export" onClick={() => setExportOpen(true)}><Download /> Esporta</button>
       </div>
     </header>
     <div className="viewer-body" style={{ gridTemplateColumns: `${sidebarOpen ? "216px " : ""}minmax(0, 1fr)${presetBarOpen ? " 270px" : ""}` }}>
@@ -415,5 +399,6 @@ export default function App() {
     {notice && <button className="toast" onClick={() => setNotice(undefined)}>{notice}<X size={15}/></button>}
     {busy && <div className="busy-overlay"><i />{busy}</div>}
     {generator}
+    {exportDialog}
   </main>;
 }

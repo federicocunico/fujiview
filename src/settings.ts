@@ -9,6 +9,9 @@ export type Settings = {
   lastProjectPath: string | null;
   /** Camera presets ticked in the variant generator (ids such as "C1", "asshot"). */
   generatorPresetIds: string[] | null;
+  /** Last export destination and minimum rating chosen in the export dialog. */
+  exportDir: string | null;
+  exportMinRating: number;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -17,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lastRoot: null,
   lastProjectPath: null,
   generatorPresetIds: null,
+  exportDir: null,
+  exportMinRating: 0,
 };
 
 /** Fills missing or wrongly typed fields from the defaults (older or hand-edited files). */
@@ -31,6 +36,8 @@ export function normalizeSettings(raw: unknown): Settings {
     lastRoot: text("lastRoot"),
     lastProjectPath: text("lastProjectPath"),
     generatorPresetIds: ids,
+    exportDir: text("exportDir"),
+    exportMinRating: typeof value.exportMinRating === "number" && Number.isInteger(value.exportMinRating) && value.exportMinRating >= 0 && value.exportMinRating <= 5 ? value.exportMinRating : 0,
   };
 }
 

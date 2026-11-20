@@ -9,7 +9,9 @@ describe("normalizeSettings", () => {
   });
 
   it("keeps saved values and drops malformed ones", () => {
-    expect(normalizeSettings({ shotSidebarOpen: false, infoSidebarOpen: "no", lastRoot: "D:\Foto", lastProjectPath: "", generatorPresetIds: ["C1", 3, "asshot"] })).toEqual({
+    expect(normalizeSettings({ shotSidebarOpen: false, infoSidebarOpen: "no", lastRoot: "D:\Foto", lastProjectPath: "", generatorPresetIds: ["C1", 3, "asshot"], exportDir: "D:\Out", exportMinRating: 9 })).toEqual({
+      exportDir: "D:\Out",
+      exportMinRating: 0,
       shotSidebarOpen: false,
       infoSidebarOpen: true,
       lastRoot: "D:\Foto",
