@@ -1,6 +1,6 @@
 [package]
 name = "fujiview"
-version = "0.2.5"
+version = "0.2.6"
 description = "High-performance Fujifilm preset comparison viewer"
 authors = ["FujiView"]
 edition = "2021"
