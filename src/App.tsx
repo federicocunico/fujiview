@@ -178,7 +178,7 @@ export default function App() {
 
     const listener = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement)?.matches("input,select,textarea")) return;
-      if (event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      if (event.code === "Space" && !event.altKey && !event.ctrlKey && !event.metaKey) {
         event.preventDefault();
         go(event.shiftKey ? -1 : 1);
         return;
@@ -406,11 +406,11 @@ export default function App() {
       {presetBarOpen && <InfoSidebar project={project} shot={shot} onProject={setProject} />}
     </div>
     <footer>
-      <button aria-label="Scatto precedente" title="Scatto precedente (Shift+Invio)" disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>
+      <button aria-label="Scatto precedente" title="Scatto precedente (Shift+Spazio)" disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>
       <div className="progress"><span style={{ width: `${index.shots.length ? ((shotIndex + 1) / index.shots.length) * 100 : 0}%` }}/></div>
       <strong>{index.shots.length ? shotIndex + 1 : 0} <em>/</em> {index.shots.length}</strong>
       <small>{decided} decisi</small>
-      <button aria-label="Scatto successivo" title="Scatto successivo (Invio)" disabled={shotIndex >= index.shots.length - 1} onClick={() => go(1)}><ChevronRight /></button>
+      <button aria-label="Scatto successivo" title="Scatto successivo (Spazio)" disabled={shotIndex >= index.shots.length - 1} onClick={() => go(1)}><ChevronRight /></button>
     </footer>
     {notice && <button className="toast" onClick={() => setNotice(undefined)}>{notice}<X size={15}/></button>}
     {busy && <div className="busy-overlay"><i />{busy}</div>}
