@@ -169,24 +169,50 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const setWinner = (index: number) => {
+      const preset = panelPresets[index];
+      if (preset && shot?.variants.some((variant) => variant.preset === preset)) {
+        updateDecision({ winnerPreset: preset, reviewed: true });
+      }
+    };
+
     const listener = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement)?.matches("input,select,textarea")) return;
-      if (event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      if (event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey) {
         event.preventDefault();
-        go(1);
+        go(event.shiftKey ? -1 : 1);
         return;
       }
-      if (event.key === "ArrowLeft") go(-1);
-      if (event.key === "ArrowRight") go(1);
-      if (event.altKey && /^[0-5]$/.test(event.key)) { event.preventDefault(); updateDecision({ rating: Number(event.key), reviewed: true }); }
-      else if (/^[1-9]$/.test(event.key)) {
-        const preset = panelPresets[Number(event.key) - 1];
-        if (preset && shot?.variants.some((variant) => variant.preset === preset)) updateDecision({ winnerPreset: preset, reviewed: true });
+
+      const { columns } = panelGrid(panelPresets.length);
+      const winnerIndex = decision?.winnerPreset ? panelPresets.indexOf(decision.winnerPreset) : -1;
+      const current = winnerIndex >= 0 ? winnerIndex : 0;
+
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        let next = current;
+        if (event.key === "ArrowLeft" && current % columns > 0) next = current - 1;
+        else if (event.key === "ArrowRight" && current % columns < columns - 1 && current + 1 < panelPresets.length) next = current + 1;
+        else if (event.key === "ArrowUp" && current - columns >= 0) next = current - columns;
+        else if (event.key === "ArrowDown" && current + columns < panelPresets.length) next = current + columns;
+        if (next !== current || winnerIndex < 0) setWinner(next);
+        return;
+      }
+
+      if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && /^[0-5]$/.test(event.key)) {
+        event.preventDefault();
+        updateDecision({ rating: Number(event.key), reviewed: true });
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && /^[1-9]$/.test(event.key)) {
+        event.preventDefault();
+        setWinner(Number(event.key) - 1);
       }
     };
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
-  }, [go, panelPresets, shot, updateDecision]);
+  }, [decision?.winnerPreset, go, panelPresets, shot, updateDecision]);
 
   // Everything in the project (panels, hidden presets, winners, ratings, last shot) is
   // saved automatically: always to the folder's session file, and also to the
@@ -331,7 +357,7 @@ export default function App() {
     <header>
       <div className="title"><strong>{project.name}</strong><small>{shot?.displayName ?? "Nessuna foto"}</small></div>
       <div className="ratings" aria-label="Valutazione">
-        {[1,2,3,4,5].map((rating) => <button key={rating} onClick={() => updateDecision({ rating: decision?.rating === rating ? 0 : rating, reviewed: true })} title={`${rating} stelle (Alt+${rating})`}><Star size={18} fill={(decision?.rating ?? 0) >= rating ? "currentColor" : "none"}/></button>)}
+        {[1,2,3,4,5].map((rating) => <button key={rating} onClick={() => updateDecision({ rating: decision?.rating === rating ? 0 : rating, reviewed: true })} title={`${rating} stelle (${rating})`}><Star size={18} fill={(decision?.rating ?? 0) >= rating ? "currentColor" : "none"}/></button>)}
       </div>
       <div className="toolbar">
         <button onClick={() => setSidebarOpen((open) => !open)} title={sidebarOpen ? "Nascondi elenco scatti" : "Mostra elenco scatti"}>
@@ -380,11 +406,11 @@ export default function App() {
       {presetBarOpen && <InfoSidebar project={project} shot={shot} onProject={setProject} />}
     </div>
     <footer>
-      <button aria-label="Scatto precedente" title="Scatto precedente (freccia sinistra)" disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>
+      <button aria-label="Scatto precedente" title="Scatto precedente (Shift+Invio)" disabled={shotIndex === 0} onClick={() => go(-1)}><ChevronLeft /></button>
       <div className="progress"><span style={{ width: `${index.shots.length ? ((shotIndex + 1) / index.shots.length) * 100 : 0}%` }}/></div>
       <strong>{index.shots.length ? shotIndex + 1 : 0} <em>/</em> {index.shots.length}</strong>
       <small>{decided} decisi</small>
-      <button aria-label="Scatto successivo" title="Scatto successivo (Invio o freccia destra)" disabled={shotIndex >= index.shots.length - 1} onClick={() => go(1)}><ChevronRight /></button>
+      <button aria-label="Scatto successivo" title="Scatto successivo (Invio)" disabled={shotIndex >= index.shots.length - 1} onClick={() => go(1)}><ChevronRight /></button>
     </footer>
     {notice && <button className="toast" onClick={() => setNotice(undefined)}>{notice}<X size={15}/></button>}
     {busy && <div className="busy-overlay"><i />{busy}</div>}

@@ -79,10 +79,9 @@ For development, set `FUJIVIEW_FAKE_CAMERA=1` to enable a simulated camera.
 - Both sidebars are open by default and can be toggled from the toolbar; their state is remembered. The right-hand sidebar has collapsible sections:
   - **Preset**: show or hide each preset (saved in the project), with each variant's film simulation, DR and white balance read from its Fujifilm MakerNote (hover for the full recipe).
   - **Scatto / Fotocamera / Luogo / File**: date and time, shutter speed, aperture, ISO, exposure compensation, focal length, exposure program, metering, flash, shutter type, camera, lens, firmware, GPS coordinates when present, pixel size and file size.
-- Click a comparison panel or press `1`–`9` to select its preset as the winner.
-- Press `Enter` or `Right Arrow` to move to the next shot.
-- Press `Left Arrow` to return to the previous shot.
-- Press `Alt+0`–`Alt+5` to set the rating.
+- Click a comparison panel, press arrow keys to move across the grid, or press `Ctrl+1`–`Ctrl+9` to select its preset as the winner.
+- Press `Enter` to move to the next shot; `Shift+Enter` to return to the previous shot.
+- Press `1`–`5` to set the rating, or `0` to clear it.
 - Double-click an image to toggle fit/zoom.
 - Use the mouse wheel to zoom and drag to pan; all panels remain synchronized.
 - Use the sidebar to jump directly to another shot or hide it from the toolbar to maximize image space.
